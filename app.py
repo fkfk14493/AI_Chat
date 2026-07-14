@@ -338,13 +338,26 @@ with st.sidebar:
         st.session_state.system_prompt = user_prompt
         db.save_prompt(user_prompt) 
         
-        # ❌ 그냥 client라고 쓰면 에러 납니다!
-        st.session_state.chat = client.chats.create(
+        # 1. 새 프롬프트로 제미나이 세션 새로 열기
+        st.session_state.chat = st.session_state.client.chats.create(
             model="gemini-2.5-flash",
             config=types.GenerateContentConfig(
                 system_instruction=st.session_state.system_prompt
             )
         )
+        
+        # ⭐️ [핵심 추가] 기존 대화가 있다면, 새롭게 바뀐 소고의 뇌에 과거 대화 히스토리 주입하기!
+        # 이렇게 해줘야 과거 대화 내용을 기억하면서 인격만 바뀝니다.
+        if "messages" in st.session_state and st.session_state.messages:
+            for msg in st.session_state.messages:
+                # 사용 중인 SDK 구조에 맞게 과거 대화를 제미나이 뇌에 이식
+                st.session_state.chat.history.append(
+                    types.Content(
+                        role="user" if msg["role"] == "user" else "model",
+                        parts=[types.Part.from_text(text=msg["content"])]
+                    )
+                )
+
         st.success("프롬프트가 변경되었습니다.")
         st.rerun()
 
