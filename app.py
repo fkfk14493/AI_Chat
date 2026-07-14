@@ -340,23 +340,29 @@ with st.sidebar:
         
         # 1. 새 프롬프트로 제미나이 세션 새로 열기
         st.session_state.chat = st.session_state.client.chats.create(
-            model="gemini-2.5-flash",
+            model="gemini-3.1-flash-lite",
             config=types.GenerateContentConfig(
                 system_instruction=st.session_state.system_prompt
             )
         )
         
-        # ⭐️ [핵심 추가] 기존 대화가 있다면, 새롭게 바뀐 소고의 뇌에 과거 대화 히스토리 주입하기!
-        # 이렇게 해줘야 과거 대화 내용을 기억하면서 인격만 바뀝니다.
+        # 2. ⭐️ [버전 에러 완벽 차단] 과거 대화 히스토리 주입하기
         if "messages" in st.session_state and st.session_state.messages:
+            new_history = []
             for msg in st.session_state.messages:
-                # 사용 중인 SDK 구조에 맞게 과거 대화를 제미나이 뇌에 이식
-                st.session_state.chat.history.append(
+                new_history.append(
                     types.Content(
                         role="user" if msg["role"] == "user" else "model",
                         parts=[types.Part.from_text(text=msg["content"])]
                     )
                 )
+            
+            # 제미나이 SDK 버전에 따라 history와 _history 양쪽 모두 안전하게 주입
+            if hasattr(st.session_state.chat, "_history"):
+                st.session_state.chat._history = new_history
+            elif hasattr(st.session_state.chat, "history"):
+                st.session_state.chat.history = new_history
+
 
         st.success("프롬프트가 변경되었습니다.")
         st.rerun()
