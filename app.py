@@ -351,20 +351,6 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("---")
-    st.subheader("위험 구역")
-    
-    # 아까 만든 초기화 버튼은 이 아래에 그대로 둡니다.
-    if st.button("대화 기록 초기화", type="primary", use_container_width=True):
-        st.session_state.messages = []
-        if hasattr(st.session_state.chat, "history"):
-            st.session_state.chat.history = []
-        elif hasattr(st.session_state.chat, "_history"):
-            st.session_state.chat._history = []
-        db.save_chat([])
-        st.success("대화 기록이 완벽하게 초기화되었습니다!")
-        st.rerun()
-
-st.markdown("---")
     st.subheader("🛠️ 추가 편의 기능")
 
     # ==========================================
@@ -412,3 +398,17 @@ st.markdown("---")
         
         if not found_any:
             st.warning("검색 결과가 없습니다.")
+
+    st.markdown("---")
+    st.subheader("위험 구역")
+    
+    # 아까 만든 초기화 버튼은 이 아래에 그대로 둡니다.
+    if st.button("대화 기록 초기화", type="primary", use_container_width=True):
+        st.session_state.messages = []
+        if hasattr(st.session_state.chat, "history"):
+            st.session_state.chat.history = []
+        elif hasattr(st.session_state.chat, "_history"):
+            st.session_state.chat._history = []
+        db.save_chat([])
+        st.success("대화 기록이 완벽하게 초기화되었습니다!")
+        st.rerun()
