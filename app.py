@@ -216,27 +216,57 @@ if user_input := st.chat_input("메시지를 입력하세요"):
 
 
 # ==========================================
-# 사이드바 설정 및 대화 초기화 기능
+# 사이드바 설정 (프롬프트 수정 + 초기화 기능)
 # ==========================================
 with st.sidebar:
-    st.title("⚙️ 설정")
-    st.write("소고와의 대화방을 관리합니다.")
+    st.title("⚙️ 설정 및 관리")
     
-    # 붉은색의 경고 버튼으로 초기화 버튼 배치
-    if st.button("대화 기록 초기화", type="primary", use_container_width=True):
-        # 1. 화면 메모리(session_state) 싹 비우기
-        st.session_state.messages = []
+    st.markdown("---")
+    st.subheader("📝 프롬프트 설정")
+    
+    # 1. 기본 프롬프트 베이스 설정 (처음 앱 켰을 때 들어갈 기본값)
+    default_prompt = (
         
-        # 2. 제미나이 자체 챗 세션(메모리) 초기화
-        # 제미나이의 대화 히스토리를 빈 리스트로 만들어 버립니다.
+    )
+    
+    # 앱을 켤 때 DB에 저장된 프롬프트가 있는지 확인하고, 없으면 기본값을 씁니다!
+    if "system_prompt" not in st.session_state:
+        st.session_state.system_prompt = db.load_prompt(default_prompt)
+
+    # 3. 웹 화면에 실시간으로 수정 가능한 대형 텍스트 박스 배치
+    user_prompt = st.text_area(
+        "프롬프트를 수정하고 아래 [변경 적용]을 누르세요:",
+        value=st.session_state.system_prompt,
+        height=200
+    )
+    
+    # 4. 변경 적용 버튼
+    if st.button("💾 프롬프트 변경 적용", use_container_width=True):
+        st.session_state.system_prompt = user_prompt
+        
+        # 이 한 줄을 추가해서 DB 파일에 폰으로 입력한 프롬프트를 영구 박제합니다!
+        db.save_prompt(user_prompt) 
+        
+        # 제미나이 세션 재생성
+        st.session_state.chat = client.chats.create(
+            model="gemini-2.5-flash",
+            config=types.GenerateContentConfig(
+                system_instruction=st.session_state.system_prompt
+            )
+        )
+        st.success("프롬프트가 변경되었습니다.")
+        st.rerun()
+
+    st.markdown("---")
+    st.subheader("위험 구역")
+    
+    # 아까 만든 초기화 버튼은 이 아래에 그대로 둡니다.
+    if st.button("대화 기록 초기화", type="primary", use_container_width=True):
+        st.session_state.messages = []
         if hasattr(st.session_state.chat, "history"):
             st.session_state.chat.history = []
         elif hasattr(st.session_state.chat, "_history"):
             st.session_state.chat._history = []
-            
-        # 3. DB 파일에서도 대화 기록 완전히 밀어버리기
-        db.save_chat([])  # 빈 배열을 저장해서 덮어씌움
-        
-        # 4. 완료 메시지 띄우고 화면 새로고침
-        st.success("대화 기록이 초기화되었습니다.")
+        db.save_chat([])
+        st.success("대화 기록이 완벽하게 초기화되었습니다!")
         st.rerun()

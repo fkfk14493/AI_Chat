@@ -85,3 +85,39 @@ def load_summary():
     row = cursor.fetchone()
     conn.close()
     return row[0] if row else "저장된 줄거리가 없습니다."
+
+# db_handler.py 맨 아래에 추가
+
+def save_prompt(prompt_text):
+    """수정된 프롬프트를 DB 파일에 영구 저장합니다."""
+    conn = sqlite3.connect("sogo_chat.db")
+    cursor = conn.cursor()
+    # 설정값을 보관하는 전용 테이블 생성
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
+    cursor.execute("""
+        INSERT OR REPLACE INTO settings (key, value)
+        VALUES ('system_prompt', ?)
+    """, (prompt_text,))
+    conn.commit()
+    conn.close()
+
+def load_prompt(default_val):
+    """저장된 프롬프트를 불러옵니다. 없으면 기본값을 반환합니다."""
+    conn = sqlite3.connect("sogo_chat.db")
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT value FROM settings WHERE key = 'system_prompt'")
+        row = cursor.fetchone()
+        if row:
+            return row[0]
+    except sqlite3.OperationalError:
+        # 테이블이 아직 안 만들어졌다면 기본값 반환
+        pass
+    finally:
+        conn.close()
+    return default_val
