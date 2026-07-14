@@ -363,3 +363,52 @@ with st.sidebar:
         db.save_chat([])
         st.success("대화 기록이 완벽하게 초기화되었습니다!")
         st.rerun()
+
+st.markdown("---")
+    st.subheader("🛠️ 추가 편의 기능")
+
+    # ==========================================
+    # 1. 📥 TXT 파일 내보내기 (다운로드) 기능
+    # ==========================================
+    if st.session_state.messages:
+        # 지금까지의 대화 배열을 하나의 기나긴 텍스트 문자열로 조립합니다.
+        export_text = ""
+        for msg in st.session_state.messages:
+            role_name = "나" if msg["role"] == "user" else "오키타 소고"
+            export_text += f"[{role_name}]\n{msg['content']}\n\n"
+            export_text += "─" * 30 + "\n\n" # 대화 구분선
+            
+        # 스트림릿 자체 다운로드 버튼 기능을 이용해 폰/PC로 즉시 다운로드!
+        st.download_button(
+            label="📥 전체 대화 TXT 다운로드",
+            data=export_text,
+            file_name="chat_backup.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+    else:
+        st.caption("대화 기록이 없어서 다운로드할 수 없습니다.")
+
+    st.markdown("---")
+
+    # ==========================================
+    # 2. 🔍 과거 대화 검색 기능
+    # ==========================================
+    search_query = st.text_input("🔍 과거 대화 검색 (단어 입력):", placeholder="찾을 단어를 입력하고 Enter...")
+
+    if search_query:
+        st.write(f"**'{search_query}' 검색 결과:**")
+        found_any = False
+        
+        # 전체 대화 내역을 돌면서 키워드가 포함되어 있는지 샅샅이 뒤집니다.
+        for idx, msg in enumerate(st.session_state.messages):
+            if search_query.lower() in msg["content"].lower():
+                found_any = True
+                role_name = "나" if msg["role"] == "user" else "소고"
+                
+                # 말풍선 형태로 검색된 대화 조각들을 보여줍니다.
+                with st.expander(f"💬 [{role_name}]의 대화에서 발견"):
+                    st.write(msg["content"])
+        
+        if not found_any:
+            st.warning("검색 결과가 없습니다.")
