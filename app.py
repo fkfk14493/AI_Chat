@@ -336,11 +336,9 @@ with st.sidebar:
     # 4. 변경 적용 버튼
     if st.button("💾 프롬프트 변경 적용", use_container_width=True):
         st.session_state.system_prompt = user_prompt
-        
-        # 이 한 줄을 추가해서 DB 파일에 폰으로 입력한 프롬프트를 영구 박제합니다!
         db.save_prompt(user_prompt) 
         
-        # 제미나이 세션 재생성
+        # ❌ 그냥 client라고 쓰면 에러 납니다!
         st.session_state.chat = client.chats.create(
             model="gemini-2.5-flash",
             config=types.GenerateContentConfig(
