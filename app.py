@@ -212,3 +212,30 @@ if user_input := st.chat_input("메시지를 입력하세요"):
                 st.write(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
                 db.save_chat(st.session_state.messages)
+
+
+# ==========================================
+# 사이드바 설정 및 대화 초기화 기능
+# ==========================================
+with st.sidebar:
+    st.title("⚙️ 설정")
+    st.write("소고와의 대화방을 관리합니다.")
+    
+    # 붉은색의 경고 버튼으로 초기화 버튼 배치
+    if st.button("대화 기록 초기화", type="primary", use_container_width=True):
+        # 1. 화면 메모리(session_state) 싹 비우기
+        st.session_state.messages = []
+        
+        # 2. 제미나이 자체 챗 세션(메모리) 초기화
+        # 제미나이의 대화 히스토리를 빈 리스트로 만들어 버립니다.
+        if hasattr(st.session_state.chat, "history"):
+            st.session_state.chat.history = []
+        elif hasattr(st.session_state.chat, "_history"):
+            st.session_state.chat._history = []
+            
+        # 3. DB 파일에서도 대화 기록 완전히 밀어버리기
+        db.save_chat([])  # 빈 배열을 저장해서 덮어씌움
+        
+        # 4. 완료 메시지 띄우고 화면 새로고침
+        st.success("대화 기록이 초기화되었습니다.")
+        st.rerun()
