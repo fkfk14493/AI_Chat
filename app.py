@@ -47,7 +47,7 @@ if "chat" not in st.session_state:
         )
         
     st.session_state.chat = st.session_state.client.chats.create(
-        model="gemini-3.1-flash-lite", # 원하는 모델 명으로 통일
+        model="gemini-3.5-flash", # 원하는 모델 명으로 통일
         history=history_contents if history_contents else None,
         config=types.GenerateContentConfig(
             system_instruction=st.session_state.system_prompt, # 🧠 DB에서 가져온 뇌 주입!
@@ -189,7 +189,7 @@ if user_input := st.chat_input("메시지를 입력하세요"):
                 
                 # 메인 챗봇의 대화 흐름을 방해하지 않게 조용히 새 API 호출로 요약만 따옵니다.
                 summary_response = st.session_state.client.models.generate_content(
-                    model="gemini-3.1-flash-lite",
+                    model="gemini-3.5-flash",
                     contents=summary_prompt
                 )
                 new_cumulative_summary = summary_response.text
@@ -224,7 +224,7 @@ if user_input := st.chat_input("메시지를 입력하세요"):
                 
                 # 새 뇌(System Instruction)와 쌩쌩한 최신 5턴 히스토리로 챗 세션 재구축!
                 st.session_state.chat = st.session_state.client.chats.create(
-                    model="gemini-3.1-flash-lite",
+                    model="gemini-3.5-flash",
                     history=new_history,
                     config=types.GenerateContentConfig(
                         system_instruction=updated_instruction,
@@ -278,7 +278,7 @@ with st.sidebar:
         
         # 1. 새 프롬프트로 제미나이 세션 새로 열기
         st.session_state.chat = st.session_state.client.chats.create(
-            model="gemini-3.1-flash-lite", # 모델 명 통일
+            model="gemini-3.5-flash", # 모델 명 통일
             config=types.GenerateContentConfig(
                 system_instruction=st.session_state.system_prompt
             )
