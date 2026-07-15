@@ -2,14 +2,53 @@ import streamlit as st
 from google import genai
 from google.genai import types
 import db_handler as db
+import os
 
-# 🚨 [여기 중요!] 1. DB와 테이블을 먼저 확실하게 생성/초기화합니다!
-db.init_db()
+# =======================================================
+# 🚨 [우주방어형] 대화 기록 긴급 대피소 (다운로드 + 업로드 통합)
+# =======================================================
+# st.expander를 써서 평소에는 접어둘 수 있게 만들어 화면 공간을 차지하지 않습니다!
+with st.expander("🚨 [긴급 상황] 대화 기록 백업 및 복원 도구", expanded=True):
+    col1, col2 = st.columns(2)
+    
+    # 📥 1. 다운로드 기능
+    with col1:
+        if os.path.exists("chat_history.db"):
+            with open("chat_history.db", "rb") as f:
+                st.download_button(
+                    label="📥 기존 기록 PC에 백업받기",
+                    data=f,
+                    file_name="chat_history.db",
+                    mime="application/octet-stream"
+                )
+        else:
+            st.info("백업할 기존 DB 파일이 없습니다.")
 
-# 📊 2. 그 다음, 안전하게 기존 토큰 사용량을 불러옵니다.
-db_input, db_output = db.load_tokens()
+    # 📤 2. 업로드 기능
+    with col2:
+        uploaded_db = st.file_uploader("📤 백업본 업로드하기", type=["db"], label_visibility="collapsed")
+        
+        if uploaded_db is not None:
+            # 기존 연결 방해 안 되게 안전하게 파일 쓰기
+            with open("chat_history.db", "wb") as f:
+                f.write(uploaded_db.getbuffer())
+            st.success("🎉 복원 완료! 새로고침(F5) 해주세요.")
+            st.stop()  # 🚨 [초특급 중요] 복원 순간 아래 DB 조회를 중지시켜 충돌(OperationalError)을 차단!
 
-# 3. 세션 상태(Session State)에 값 주입
+st.markdown("---") # 구분선으로 깔끔하게 경계 나누기
+
+
+# =======================================================
+# 📊 [정상 실행 영역] 복원이 완료된 후 안전하게 가동되는 영역
+# =======================================================
+# DB 파일이 실제로 존재할 때만 안전하게 초기화 및 토큰 로드를 진행합니다.
+if os.path.exists("chat_history.db"):
+    db.init_db()  # 안전하게 테이블 생성/확인
+    db_input, db_output = db.load_tokens()
+else:
+    db_input, db_output = 0, 0
+
+# 세션 상태(Session State) 초기화
 if "total_input_tokens" not in st.session_state:
     st.session_state.total_input_tokens = db_input
 if "total_output_tokens" not in st.session_state:
