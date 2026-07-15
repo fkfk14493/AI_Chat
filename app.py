@@ -97,23 +97,30 @@ st.markdown("---")
 # =======================================================
 import db_handler as db
 
-# 파일 존재 여부 상관없이 무조건 테이블 자동 빌드
+# 🚨 [1단계 방어] 파일이 있든 없든 무조건 테이블 초기화부터 진행!
 try:
     db.init_db()
     db_input, db_output = db.load_tokens()
-    db_system_prompt = db.get_system_prompt("")
+    
+    # 🚨 [진짜 핵심] 8KB짜리 chat.db에서 시스템 프롬프트를 강제로 가져옵니다!
+    db_system_prompt = db.get_system_prompt("") 
+    
 except Exception as e:
-    st.warning(f"⚠️ DB 초기 연결 대기 중... ({e})")
+    st.warning(f"⚠️ DB 연결 안정화 대기 중... ({e})")
     db_input, db_output = 0, 0
     db_system_prompt = ""
 
-# 세션 상태 초기화 (이미 위에서 복원 주입을 마쳤다면 그 값을 유지하고, 없을 때만 DB에서 로드)
+# 세션 상태 초기화
 if "total_input_tokens" not in st.session_state:
     st.session_state.total_input_tokens = db_input
 if "total_output_tokens" not in st.session_state:
     st.session_state.total_output_tokens = db_output
-if "system_prompt" not in st.session_state:
+
+# 🚨 [여기 집중!] 만약 기존 세션에 빈 프롬프트("")가 강제로 물려있다면 
+# 새롭게 가져온 8KB DB 안의 진짜 프롬프트(db_system_prompt)로 강제로 갈아 끼웁니다!
+if "system_prompt" not in st.session_state or st.session_state.system_prompt == "":
     st.session_state.system_prompt = db_system_prompt
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
