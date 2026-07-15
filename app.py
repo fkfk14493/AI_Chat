@@ -33,12 +33,11 @@ if "client" not in st.session_state:
 if "system_prompt" not in st.session_state:
     st.session_state.system_prompt = db.get_system_prompt("")
 
-# 3. 제미나이 대화 세션 연결 (이중 중복 생성 방지 및 통합)
+# 3. 제미나이 대화 세션 연결 (이중 중복 생성 방지 및 자동 백업 우회 적용)
 if "chat" not in st.session_state:
     history_contents = []
     for m in st.session_state.messages:
-        # 🚨 [추가] 시스템 메시지(요약본)는 API 대화 히스토리에 직접 주입하지 않고 패스합니다!
-        # (시스템 지침은 아래 GenerateContentConfig의 system_instruction으로만 들어가는 게 안전합니다.)
+        # 시스템 메시지(요약본)는 API 대화 히스토리에 직접 주입하지 않고 패스합니다.
         if m["role"] == "system":
             continue
             
@@ -50,14 +49,36 @@ if "chat" not in st.session_state:
             )
         )
         
-    st.session_state.chat = st.session_state.client.chats.create(
-        model="gemini-3.5-flash", # 3.5 Flash로 안전하게 빌드!
-        history=history_contents if history_contents else None,
-        config=types.GenerateContentConfig(
-            system_instruction=st.session_state.system_prompt, # 🧠 DB에서 가져온 뇌 주입!
-            temperature=0.95,
+    # 🔥 [핵심 백업 로직] 3.5가 터지면 자동 대피합니다.
+    try:
+        # 1. 일단 똑똑하고 빠른 3.5 Flash로 접속 시도!
+        st.session_state.chat = st.session_state.client.chats.create(
+            model="gemini-3.5-flash",
+            history=history_contents if history_contents else None,
+            config=types.GenerateContentConfig(
+                system_instruction=st.session_state.system_prompt,
+                temperature=0.95,
+            )
         )
-    )
+    except Exception as e:
+        # 2. 만약 구글 서버 과부하(503, UNAVAILABLE 등) 에러가 발생하면?
+        error_msg = str(e)
+        if "503" in error_msg or "UNAVAILABLE" in error_msg or "high demand" in error_msg:
+            # 즉시 2.5 Flash로 우회해서 재시도!
+            st.session_state.chat = st.session_state.client.chats.create(
+                model="gemini-3.1-flash-lite",  # 안정성 끝판왕 우회로
+                history=history_contents if history_contents else None,
+                config=types.GenerateContentConfig(
+                    system_instruction=st.session_state.system_prompt,
+                    temperature=0.95,
+                )
+            )
+            # 화면 우측 하단에 조용히 대피 완료 알림을 띄워줍니다.
+            st.toast("3.5 모델 혼잡으로 인해 3.1 Flash-lite 모델로 임시 우회 연결되었습니다.")
+        else:
+            # 503 이외의 다른 심각한 에러라면 사용자에게 에러를 그대로 보여줍니다.
+            raise e
+
 # ── [기존 출력 영역 교체] ──
 # 웹 화면에 대화 기록만 순수하게 출력
 for idx, msg in enumerate(st.session_state.messages):
