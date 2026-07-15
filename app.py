@@ -6,6 +6,8 @@ import db_handler as db
 # 🚨 [여기 중요!] 1. DB와 테이블을 먼저 확실하게 생성/초기화합니다!
 db.init_db()
 
+st.write(f"테스트 값 출력: {db.TEST_VAL}")
+
 # 📊 2. 그 다음, 안전하게 기존 토큰 사용량을 불러옵니다.
 db_input, db_output = db.load_tokens()
 
@@ -609,7 +611,3 @@ with st.sidebar:
         db.save_chat([])
         st.success("대화 기록이 완벽하게 초기화되었습니다!")
         st.rerun()
-
-
-
-st.write(f"테스트 값 출력: {db.TEST_VAL}")
