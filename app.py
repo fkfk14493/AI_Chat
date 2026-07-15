@@ -64,20 +64,25 @@ if "db_restored" in st.session_state and st.session_state["db_restored"]:
 
 import db_handler as db
 
-# 🚨 [해결책] 파일이 있든 없든 무조건 init_db()를 실행해서 
-# 기존 메시지 테이블과 토큰 테이블을 안전하게 생성해 둡니다!
+# 🚨 [우주방어] 모든 초기 DB 조회를 try-except 안전망 안에서 한 번에 해결합니다!
 try:
-    db.init_db()  # 👈 이제 파일이 없어도 에러 없이 새 DB와 테이블을 만듭니다!
-    db_input, db_output = db.load_tokens()
+    db.init_db()  # 1. 테이블들(config, token_usage 등) 안전하게 생성/확인
+    db_input, db_output = db.load_tokens()  # 2. 안전하게 토큰 로드
+    db_system_prompt = db.get_system_prompt("")  # 3. 안전하게 시스템 프롬프트 로드 👈 [여기에 추가!]
 except Exception as e:
     st.warning(f"⚠️ DB 연결 안정화 대기 중: {e}")
     db_input, db_output = 0, 0
+    db_system_prompt = ""  # DB 충돌 시 임시 기본값 처리
 
 # 세션 상태(Session State) 초기화
 if "total_input_tokens" not in st.session_state:
     st.session_state.total_input_tokens = db_input
 if "total_output_tokens" not in st.session_state:
     st.session_state.total_output_tokens = db_output
+
+# 🚨 [여기에 추가!] 시스템 프롬프트 세션 주입도 안전하게 여기서 끝냅니다!
+if "system_prompt" not in st.session_state:
+    st.session_state.system_prompt = db_system_prompt
 
 
 # [수정] 브라우저 기본 레이아웃에서 불필요한 여백을 줄이고 깔끔하게 세팅
@@ -102,8 +107,8 @@ if "client" not in st.session_state:
     st.session_state.client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
 # 2. 실행 시 DB에서 프롬프트 가져와서 세션에 얹기 (기본값 빈 문자열 설정으로 에러 차단!)
-if "system_prompt" not in st.session_state:
-    st.session_state.system_prompt = db.get_system_prompt("")
+# if "system_prompt" not in st.session_state:
+#    st.session_state.system_prompt = db.get_system_prompt("")
 
 # 3. 제미나이 대화 세션 연결 (이중 중복 생성 방지 및 자동 백업 우회 적용)
 if "chat" not in st.session_state:

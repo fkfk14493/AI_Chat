@@ -134,15 +134,21 @@ def get_system_prompt(default_prompt):
 # ==========================================
 # 🛠️ [DB 초기화 및 테이블 생성]
 # ==========================================
+# db_handler.py
+
 def init_db():
-    # 👈 기존 "chat_history.db" 대신 절대 경로인 DB_PATH로 확실하게 연결합니다!
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # 💬 (기존 대화 저장 테이블이 여기에 구현되어 있다면 그대로 두시면 됩니다)
-    # 예: cursor.execute("CREATE TABLE IF NOT EXISTS messages ...")
+    # 🚨 [여기가 진짜 핵심!] config 테이블이 없으면 무조건 생성합니다!
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS config (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
     
-    # 📊 토큰 저장용 테이블 생성 (없으면 자동 생성)
+    # 📊 토큰 저장용 테이블 추가 (없으면 생성)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS token_usage (
             id INTEGER PRIMARY KEY,
@@ -150,9 +156,10 @@ def init_db():
             output_tokens INTEGER DEFAULT 0
         )
     """)
-    
-    # 기본값 행 1개 삽입 (id가 1인 행이 없을 때만 삽입하여 기존 값 보존)
     cursor.execute("INSERT OR IGNORE INTO token_usage (id, input_tokens, output_tokens) VALUES (1, 0, 0)")
+    
+    # 💬 (기존에 쓰시던 대화 저장용 테이블 생성 코드도 여기에 같이 있어야 합니다!)
+    # 예: cursor.execute("CREATE TABLE IF NOT EXISTS chat_history ...")
     
     conn.commit()
     conn.close()
