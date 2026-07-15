@@ -166,7 +166,7 @@ def update_tokens(input_tokens, output_tokens):
     conn = sqlite3.connect("chat_history.db")
     cursor = conn.cursor()
     
-    # 1️⃣ 테이블이 없다면 무조건 강제로 만듭니다.
+    # 1️⃣ 테이블이 없다면 무조건 만듭니다.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS token_usage (
             id INTEGER PRIMARY KEY,
@@ -175,10 +175,10 @@ def update_tokens(input_tokens, output_tokens):
         )
     """)
     
-    # 2️⃣ id=1이 없으면 일단 기본값(0, 0)으로 무조건 밀어 넣습니다.
+    # 2️⃣ id=1이 없으면 기본값(0, 0) 주입
     cursor.execute("INSERT OR IGNORE INTO token_usage (id, input_tokens, output_tokens) VALUES (1, 0, 0)")
     
-    # 3️⃣ 이제 확실하게 존재하는 id=1 행을 업데이트합니다.
+    # 3️⃣ 이제 업데이트합니다.
     cursor.execute("""
         UPDATE token_usage 
         SET input_tokens = ?, output_tokens = ? 
@@ -197,7 +197,7 @@ def load_tokens():
     conn = sqlite3.connect("chat_history.db")
     cursor = conn.cursor()
     
-    # 1️⃣ 불러올 때도 테이블이 없으면 무조건 강제로 만듭니다.
+    # 1️⃣ 불러올 때도 안전하게 테이블 생성 확인
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS token_usage (
             id INTEGER PRIMARY KEY,
@@ -208,11 +208,11 @@ def load_tokens():
     cursor.execute("INSERT OR IGNORE INTO token_usage (id, input_tokens, output_tokens) VALUES (1, 0, 0)")
     conn.commit()
     
-    # 2️⃣ 확실하게 id=1인 행에서 토큰 값을 안전하게 가져옵니다.
+    # 2️⃣ 안전하게 토큰 가져오기
     cursor.execute("SELECT input_tokens, output_tokens FROM token_usage WHERE id = 1")
     row = cursor.fetchone()
     conn.close()
     
     if row:
         return row[0], row[1]
-    return 0, 0
+        return 0, 0
