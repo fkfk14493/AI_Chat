@@ -64,25 +64,30 @@ if "db_restored" in st.session_state and st.session_state["db_restored"]:
 
 import db_handler as db
 
-# 🚨 [우주방어] 모든 초기 DB 조회를 try-except 안전망 안에서 한 번에 해결합니다!
+# 🚨 [우주방어] 모든 초기 DB 조회를 try-except 안전망 안에서 해결
 try:
-    db.init_db()  # 1. 테이블들(config, token_usage 등) 안전하게 생성/확인
-    db_input, db_output = db.load_tokens()  # 2. 안전하게 토큰 로드
-    db_system_prompt = db.get_system_prompt("")  # 3. 안전하게 시스템 프롬프트 로드 👈 [여기에 추가!]
+    db.init_db()  # 1. 테이블들(config, token_usage 등) 강제 생성/확인
+    db_input, db_output = db.load_tokens()  # 2. 토큰 로드
+    db_system_prompt = db.get_system_prompt("")  # 3. 시스템 프롬프트 로드
 except Exception as e:
-    st.warning(f"⚠️ DB 연결 안정화 대기 중: {e}")
+    st.warning(f"⚠️ DB 연결 안정화 대기 중 (복원 버튼을 이용해 주세요): {e}")
     db_input, db_output = 0, 0
-    db_system_prompt = ""  # DB 충돌 시 임시 기본값 처리
+    db_system_prompt = ""
 
-# 세션 상태(Session State) 초기화
+# 토큰 세션 상태 초기화
 if "total_input_tokens" not in st.session_state:
     st.session_state.total_input_tokens = db_input
 if "total_output_tokens" not in st.session_state:
     st.session_state.total_output_tokens = db_output
 
-# 🚨 [여기에 추가!] 시스템 프롬프트 세션 주입도 안전하게 여기서 끝냅니다!
+# 시스템 프롬프트 세션 주입
 if "system_prompt" not in st.session_state:
     st.session_state.system_prompt = db_system_prompt
+
+# 🚨 [초특급 중요!] 대화 메시지 세션 안전망 추가!
+# DB가 안정화되지 않았을 때 messages가 없어서 아래쪽 코드에서 뻗는 것을 원천 차단합니다.
+if "messages" not in st.session_state:
+    st.session_state.messages = []  # 👈 일단 빈 리스트로 뚫어놓아서 아래쪽 에러를 방어합니다!
 
 
 # [수정] 브라우저 기본 레이아웃에서 불필요한 여백을 줄이고 깔끔하게 세팅
