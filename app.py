@@ -2,92 +2,88 @@ import streamlit as st
 from google import genai
 from google.genai import types
 import os
+import sqlite3
 
-# 🎯 app.py에서도 똑같이 'chat.db'의 절대 경로를 바라보게 합니다!
+# 🎯 DB 절대 경로 설정
 DB_FILE = "chat.db"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, DB_FILE)
 
 # =======================================================
-# 🚨 [1단계] 초비상 대피소 (이 영역이 켜져 있을 땐 DB를 절대 만지지 않음)
+# 📥 [1단계] 즉시 반영형 무적의 복원 도구
 # =======================================================
-with st.expander("🚨 [긴급 상황] 대화 기록 백업 및 복원 도구", expanded=True):
+with st.expander("🚨 대화 기록 백업 및 복원 (성공 시 새로고침하면 영구 반영!)", expanded=False):
     col1, col2 = st.columns(2)
     
+    # 1. 백업 다운로드
     with col1:
-        if os.path.exists("chat_history.db"):
-            with open("chat_history.db", "rb") as f:
+        if os.path.exists(DB_PATH):
+            with open(DB_PATH, "rb") as f:
                 st.download_button(
-                    label="📥 기존 기록 PC에 백업받기",
+                    label="📥 현재 DB PC에 백업받기",
                     data=f,
-                    file_name="chat_history.db",
+                    file_name=DB_FILE,
                     mime="application/octet-stream"
                 )
         else:
-            st.info("백업할 기존 DB 파일이 없습니다.")
+            st.info("백업할 DB 파일이 없습니다.")
 
+    # 2. 즉시 반영 업로드 (여기가 치트키입니다!)
     with col2:
-        uploaded_db = st.file_uploader("📤 백업본 업로드하기", type=["db"], label_visibility="collapsed")
+        uploaded_db = st.file_uploader("📤 백업본 업로드 (자동 덮어쓰기)", type=["db"], label_visibility="collapsed")
         
         if uploaded_db is not None:
-            # 안전하게 파일 덮어쓰기
-            with open("chat_history.db", "wb") as f:
-                f.write(uploaded_db.getbuffer())
-            
-            st.success("🎉 DB 파일 복원 완료!")
-            
-            # 🚨 [여기 중요] 복원하자마자 테이블 생성 함수 강제 주입 후 세션 정리!
             try:
-                import db_handler as db
-                db.init_db()  # 업로드한 파일에 강제로 테이블 연결 복구
-                st.info("테이블 연결을 복구했습니다.")
-            except Exception as e:
-                st.warning(f"테이블 연결 중 알림: {e}")
+                # 🚨 [핵심] 기존에 혹시 열려있을지 모르는 SQLite 접속을 강제로 차단하고 덮어씁니다.
+                import gc
+                gc.collect()  # 파이썬 가비지 컬렉터로 백그라운드 DB 연결 강제 정리
                 
-            st.session_state["db_restored"] = True
-            
-            # 강제로 Rerun 시킬 수 있는 버튼을 노출시킵니다.
-            if st.button("🔄 즉시 서버 연결 새로고침하기 (클릭!)"):
+                # 파일 덮어쓰기
+                with open(DB_PATH, "wb") as f:
+                    f.write(uploaded_db.getbuffer())
+                
+                # 업로드된 DB가 잘 열리는지 즉시 검증 및 초기화
+                conn = sqlite3.connect(DB_PATH)
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+                tables = cursor.fetchall()
+                conn.close()
+                
+                st.success("🎉 DB 덮어쓰기 성공! 연결 테이블 감지 완료.")
+                
+                # 🔄 즉시 새로고침을 실행하여 세션을 초기화하고 DB를 읽게 만듭니다!
                 st.rerun()
                 
-            st.stop()  # 아래 코드 절대 못 읽게 막기
+            except Exception as e:
+                st.error(f"❌ 복원 중 오류 발생: {e}")
 
 st.markdown("---")
 
 
 # =======================================================
-# 📊 [2단계] 복원이 완벽하게 끝난 후 정상 가동 영역
+# 📊 [2단계] 메인 가동 영역 (언제나 안전하게 로드)
 # =======================================================
-if "db_restored" in st.session_state and st.session_state["db_restored"]:
-    st.info("🔄 DB 복원이 완료되었습니다. 페이지를 새로고침(F5) 해주세요!")
-    st.stop()
-
 import db_handler as db
 
-# 🚨 [우주방어] 모든 초기 DB 조회를 try-except 안전망 안에서 해결
+# 파일 존재 여부 상관없이 무조건 테이블 자동 빌드
 try:
-    db.init_db()  # 1. 테이블들(config, token_usage 등) 강제 생성/확인
-    db_input, db_output = db.load_tokens()  # 2. 토큰 로드
-    db_system_prompt = db.get_system_prompt("")  # 3. 시스템 프롬프트 로드
+    db.init_db()
+    db_input, db_output = db.load_tokens()
+    db_system_prompt = db.get_system_prompt("")
 except Exception as e:
-    st.warning(f"⚠️ DB 연결 안정화 대기 중 (복원 버튼을 이용해 주세요): {e}")
+    st.warning(f"⚠️ DB 초기 연결 대기 중... ({e})")
     db_input, db_output = 0, 0
     db_system_prompt = ""
 
-# 토큰 세션 상태 초기화
+# 세션 상태 초기화
 if "total_input_tokens" not in st.session_state:
     st.session_state.total_input_tokens = db_input
 if "total_output_tokens" not in st.session_state:
     st.session_state.total_output_tokens = db_output
-
-# 시스템 프롬프트 세션 주입
 if "system_prompt" not in st.session_state:
     st.session_state.system_prompt = db_system_prompt
-
-# 🚨 [초특급 중요!] 대화 메시지 세션 안전망 추가!
-# DB가 안정화되지 않았을 때 messages가 없어서 아래쪽 코드에서 뻗는 것을 원천 차단합니다.
 if "messages" not in st.session_state:
-    st.session_state.messages = []  # 👈 일단 빈 리스트로 뚫어놓아서 아래쪽 에러를 방어합니다!
+    st.session_state.messages = []
 
 
 # [수정] 브라우저 기본 레이아웃에서 불필요한 여백을 줄이고 깔끔하게 세팅
