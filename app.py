@@ -1,17 +1,12 @@
 import streamlit as st
-from google import genai
-from google.genai import types
-import db_handler as db
 import os
 
 # =======================================================
-# 🚨 [우주방어형] 대화 기록 긴급 대피소 (다운로드 + 업로드 통합)
+# 🚨 [1단계] 초비상 대피소 (이 영역이 켜져 있을 땐 DB를 절대 만지지 않음)
 # =======================================================
-# st.expander를 써서 평소에는 접어둘 수 있게 만들어 화면 공간을 차지하지 않습니다!
 with st.expander("🚨 [긴급 상황] 대화 기록 백업 및 복원 도구", expanded=True):
     col1, col2 = st.columns(2)
     
-    # 📥 1. 다운로드 기능
     with col1:
         if os.path.exists("chat_history.db"):
             with open("chat_history.db", "rb") as f:
@@ -24,24 +19,33 @@ with st.expander("🚨 [긴급 상황] 대화 기록 백업 및 복원 도구", 
         else:
             st.info("백업할 기존 DB 파일이 없습니다.")
 
-    # 📤 2. 업로드 기능
     with col2:
         uploaded_db = st.file_uploader("📤 백업본 업로드하기", type=["db"], label_visibility="collapsed")
         
         if uploaded_db is not None:
-            # 기존 연결 방해 안 되게 안전하게 파일 쓰기
+            # 안전하게 기존 연결 방해 안 되게 파일 쓰기
             with open("chat_history.db", "wb") as f:
                 f.write(uploaded_db.getbuffer())
             st.success("🎉 복원 완료! 새로고침(F5) 해주세요.")
-            st.stop()  # 🚨 [초특급 중요] 복원 순간 아래 DB 조회를 중지시켜 충돌(OperationalError)을 차단!
+            
+            # 🚨 [치트키] 세션에 복원 완료를 마크하고 앱을 즉시 멈춥니다.
+            st.session_state["db_restored"] = True
+            st.stop()  # 밑으로 절대 안 내려가게 멱살 잡고 멈춤!
 
-st.markdown("---") # 구분선으로 깔끔하게 경계 나누기
+st.markdown("---")
 
 
 # =======================================================
-# 📊 [정상 실행 영역] 복원이 완료된 후 안전하게 가동되는 영역
+# 📊 [2단계] 복원이 완벽하게 끝난 후 "안전"할 때만 구동되는 영역
 # =======================================================
-# DB 파일이 실제로 존재할 때만 안전하게 초기화 및 토큰 로드를 진행합니다.
+# 업로드가 방금 완료되었거나, 아직 파일 업로드 중이라면 아래 코드를 실행하지 않습니다!
+if "db_restored" in st.session_state and st.session_state["db_restored"]:
+    st.info("🔄 DB 복원이 완료되었습니다. 정상 가동을 위해 페이지를 새로고침(F5) 해주세요!")
+    st.stop()
+
+# 이제 정말 안전할 때만 db_handler를 임포트하고 실행합니다.
+import db_handler as db  # 👈 임포트 시점 자체를 뒤로 늦췄습니다!
+
 if os.path.exists("chat_history.db"):
     db.init_db()  # 안전하게 테이블 생성/확인
     db_input, db_output = db.load_tokens()
