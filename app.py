@@ -319,9 +319,9 @@ for idx, msg in enumerate(st.session_state.messages):
 
 
 # =======================================================
-# 🤖 [4단계] 사용자 입력창 및 통합 대화 처리 구역 (완전판)
+# 🤖 [4단계] 사용자 입력창 및 통합 대화 처리 구역 (UI 인스턴트 반영 버전)
 # =======================================================
-if user_input := st.chat_input("메시지를 입력하세요..."):
+if user_input := st.chat_input("소고에게 메시지를 보내보세요..."):
     
     # ── [특수 기능 1] 사용자가 '/저장' 이라고 입력했을 때 ──
     if user_input.strip() == "/저장":
@@ -344,25 +344,19 @@ if user_input := st.chat_input("메시지를 입력하세요..."):
         if len(st.session_state.messages) >= 1:
             with st.spinner("대화방을 동기화하는 중... "):
                 
-                # 🚨 [지능형 감지] 마지막 메시지가 유저(user)의 것인지, AI(model)의 것인지 판별합니다.
                 last_msg_role = st.session_state.messages[-1]["role"]
                 
                 if last_msg_role == "user":
-                    # 에러 상황: 답장 없이 내 질문만 덜렁 남은 경우 ➡️ 최근 "1개"만 삭제
                     remove_count = 1
                 else:
-                    # 정상 상황: 티키타카가 다 완료된 경우 ➡️ 최근 "2개(1턴)" 삭제
                     remove_count = 2
 
-                # 1. 메모리(세션 상태)에서 판별된 개수만큼 삭제
                 for _ in range(remove_count):
                     if st.session_state.messages:
                         st.session_state.messages.pop()
                 
-                # 2. 롤백된 기록 DB에 새로 덮어쓰기
                 db.save_chat(st.session_state.messages)
                 
-                # 3. 🔥 제미나이 자체 세션 뇌 구조에서도 동일한 개수만큼 롤백
                 if hasattr(st.session_state.chat, "history"):
                     if st.session_state.chat.history:
                         st.session_state.chat.history = st.session_state.chat.history[:-remove_count]
@@ -371,7 +365,6 @@ if user_input := st.chat_input("메시지를 입력하세요..."):
                     if st.session_state.chat._history:
                         st.session_state.chat._history = st.session_state.chat._history[:-remove_count]
                 
-            # 4. 새로고침으로 깔끔하게 지워진 화면 갱신
             if remove_count == 1:
                 st.toast("삭제 되었습니다.")
             else:
@@ -383,48 +376,50 @@ if user_input := st.chat_input("메시지를 입력하세요..."):
             
     # ── [일반 대화] 특수 명령어가 아닌 일반 티키타카일 때 ──
     else:
-        # 1. 사용자의 새 질문을 세션(메모리)에만 추가! (화면에 직접 그리지 않음)
+        # 1. 🚨 [UI 즉시 반영] 엔터 치자마자 내 질문을 세션에 넣고 화면에 "즉시" 그려서 답답함 해소!
         st.session_state.messages.append({"role": "user", "content": user_input})
+        with st.chat_message("user"):
+            st.write(user_input)
         
-        # 2. 답변 생성 영역
-        try:
-            # [시도 1] 3.5 Flash로 대화 시도
-            response = st.session_state.chat.send_message(user_input)
-            response_text = response.text
-            
-            # 📊 토큰 수치 가로채기 및 DB 누적
-            if response.usage_metadata:
-                st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
-                st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
-                db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
-            
-        except Exception as e:
-            error_msg = str(e)
-            if "503" in error_msg or "UNAVAILABLE" in error_msg or "high demand" in error_msg:
-                st.toast("3.5 모델 혼잡 감지! 3.1 Flash로 우회합니다.")
-                
-                st.session_state.chat = st.session_state.client.chats.create(
-                    model="gemini-3.1-flash-lite", 
-                    history=st.session_state.chat.get_history(), 
-                    config=types.GenerateContentConfig(
-                        system_instruction=st.session_state.system_prompt,
-                        temperature=0.95
-                    )
-                )
-                
-                # [시도 2] 즉시 재요청!
-                response = st.session_state.chat.send_message(user_input)
-                response_text = response.text
-                
-                # 📊 [수정완료] 잘려있던 괄호와 인자값 완벽 복구!
-                if response.usage_metadata:
-                    st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
-                    st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
-                    db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
-            else:
-                raise e
+        # 2. 🚨 [로딩 연출] 소고 대답이 나올 영역에 로딩 스피너와 프로필 사진을 띄워 대기 상태를 직관적으로 보여줍니다!
+        with st.chat_message("assistant", avatar="sogo.jpg"):
+            with st.spinner("소고가 생각하는 중..."):
+                try:
+                    # [시도 1] 3.5 Flash로 대화 시도
+                    response = st.session_state.chat.send_message(user_input)
+                    response_text = response.text
+                    
+                    if response.usage_metadata:
+                        st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
+                        st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
+                        db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    if "503" in error_msg or "UNAVAILABLE" in error_msg or "high demand" in error_msg:
+                        st.toast("3.5 모델 혼잡 감지! 3.1 Flash로 우회합니다.")
+                        
+                        st.session_state.chat = st.session_state.client.chats.create(
+                            model="gemini-3.1-flash-lite", 
+                            history=st.session_state.chat.get_history(), 
+                            config=types.GenerateContentConfig(
+                                system_instruction=st.session_state.system_prompt,
+                                temperature=0.95
+                            )
+                        )
+                        
+                        # [시도 2] 즉시 재요청!
+                        response = st.session_state.chat.send_message(user_input)
+                        response_text = response.text
+                        
+                        if response.usage_metadata:
+                            st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
+                            st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
+                            db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
+                    else:
+                        raise e
         
-        # 3. AI 소고의 새 답변도 세션(메모리)에만 추가!
+        # 3. AI 소고의 새 답변도 세션(메모리)에 최종 추가
         st.session_state.messages.append({"role": "assistant", "content": response_text})
         
         # 4. DB에 현재 대화 기록을 통째로 딱 한 번만 저장!
@@ -433,30 +428,22 @@ if user_input := st.chat_input("메시지를 입력하세요..."):
         # ==========================================
         # 🔥 5턴 버퍼 슬라이딩 윈도우 자동 작동 영역
         # ==========================================
-        # 메시지가 30개 (나의 대화 15개 + 상대 대화 15개 = 15턴) 쌓였을 때 작동!
         if len(st.session_state.messages) >= 30:
             with st.spinner("예전 기억들을 요약하는 중..."):
-                
-                # A. 보존할 가장 생생한 최신 5턴 (메시지 10개) 분리
                 keep_messages = st.session_state.messages[-10:]
-                
-                # B. 요약할 오래된 과거 10턴 (메시지 20개) 분리
                 old_messages = st.session_state.messages[:-10]
                 
-                # C. 텍스트로 합쳐서 요약용 재료 만들기
                 old_chat_text = ""
                 for msg in old_messages:
                     role_name = "당신" if msg["role"] == "user" else "나"
                     old_chat_text += f"{role_name}: {msg['content']}\n"
                 
-                # D. 기존에 저장된 줄거리 요약본이 있다면 DB에서 긁어오기
                 existing_summary = ""
                 try:
                     existing_summary = db.load_summary() 
                 except Exception:
                     existing_summary = ""
                 
-                # E. 제미나이 플래시를 시켜서 기존 요약본 + 새로 밀려난 10턴 누적 압축하기
                 summary_prompt = f"""
                 너는 소설의 줄거리를 기록하는 전문 서기다.
                 [기존 줄거리]에 [새로 추가된 대화 기록]을 누적으로 반영하여, 전체 맥락과 인물들의 감정선이 자연스럽게 이어지도록 
@@ -475,14 +462,11 @@ if user_input := st.chat_input("메시지를 입력하세요..."):
                 )
                 new_cumulative_summary = summary_response.text
                 
-                # F. 누적 압축된 줄거리를 DB에 안전하게 저장!
                 db.save_summary(new_cumulative_summary)
                 
-                # G. 세션 메시지 리셋: 오직 [최신 5턴]만 화면에 남기기
                 st.session_state.messages = list(keep_messages)
                 db.save_chat(keep_messages)
                 
-                # H. 제미나이 실제 뇌(API History)에도 요약본 컨텍스트와 최신 5턴만 주입해서 뇌세포 포맷
                 new_history = []
                 for msg in keep_messages:
                     role_name = "model" if msg["role"] == "assistant" else "user"
@@ -493,7 +477,6 @@ if user_input := st.chat_input("메시지를 입력하세요..."):
                         )
                     )
                 
-                # 시스템 프롬프트 업데이트 (시스템 지침에 누적 줄거리를 강제로 얹어줍니다)
                 updated_instruction = f"""
                 {st.session_state.system_prompt}
                 
@@ -503,7 +486,6 @@ if user_input := st.chat_input("메시지를 입력하세요..."):
                 위의 줄거리를 머릿속에 완벽히 인지하고, 과거 설정을 기억하면서 아래 이어지는 대화에 자연스럽게 반응해라.
                 """
                 
-                # 새 뇌(System Instruction)와 쌩쌩한 최신 5턴 히스토리로 챗 세션 재구축!
                 st.session_state.chat = st.session_state.client.chats.create(
                     model="gemini-3.5-flash",
                     history=new_history,
@@ -515,9 +497,9 @@ if user_input := st.chat_input("메시지를 입력하세요..."):
                 
             st.toast("5턴 줄거리 요약본으로 완벽하게 압축되었습니다.")
             
-        # 모든 대화 및 압축 처리가 완료된 후 화면을 갱신시켜 정직하게 1줄만 그리게 만듭니다!
+        # 5. 모든 처리가 끝나고 새로고침되어 중복 없이 최종 렌더링!
         st.rerun()
-
+        
 
 # ==========================================
 # 사이드바 설정 (프롬프트 수정 + 초기화 기능)
