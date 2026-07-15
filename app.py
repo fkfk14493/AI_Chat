@@ -4,6 +4,10 @@ from google.genai import types
 import os
 import sqlite3
 
+# 🚨 [1. 천장 잘림 방지] 맨 위에 물리적인 빈 여백을 줘서 상자가 안 잘리게 내립니다!
+st.write("")
+st.write("")
+
 # 🎯 DB 절대 경로 설정
 DB_FILE = "chat.db"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -12,7 +16,6 @@ DB_PATH = os.path.join(BASE_DIR, DB_FILE)
 # =======================================================
 # 📥 [1단계] 즉시 반영형 무적의 복원 도구
 # =======================================================
-# 💡 제목을 아주 짧게 고쳐서 모바일이나 좁은 창에서도 절대 잘리지 않게 방어합니다!
 with st.expander("🛠️ 데이터 백업 및 복원", expanded=False):
     col1, col2 = st.columns(2)
     
@@ -29,34 +32,58 @@ with st.expander("🛠️ 데이터 백업 및 복원", expanded=False):
         else:
             st.info("백업할 DB가 없습니다.")
 
-    # 2. 즉시 반영 업로드
+    # 2. 즉시 반영 업로드 (메모리 강제 주입식)
     with col2:
         uploaded_db = st.file_uploader("📤 백업본 업로드", type=["db"], label_visibility="collapsed")
         
         if uploaded_db is not None:
             try:
-                # 기존 SQLite 백그라운드 접속 강제 정리
+                # 기존 SQLite 연결 정리
                 import gc
                 gc.collect()
                 
-                # 파일 덮어쓰기
+                # 파일 강제 덮어쓰기
+                db_bytes = uploaded_db.getbuffer()
                 with open(DB_PATH, "wb") as f:
-                    f.write(uploaded_db.getbuffer())
+                    f.write(db_bytes)
                 
-                # 덮어쓴 DB 구조 무결성 즉시 검증
+                # 덮어쓴 DB가 정상적인지 테스트 연결
                 conn = sqlite3.connect(DB_PATH)
                 cursor = conn.cursor()
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-                tables = cursor.fetchall()
+                
+                # 🚨 [메모리 강제 동기화 치트키]
+                # 서버가 깃허브 파일로 되돌리기 전에, 업로드된 파일에서 토큰 정보를 미리 선점해서 세션에 꽂아 넣습니다!
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS token_usage (
+                        id INTEGER PRIMARY KEY,
+                        input_tokens INTEGER DEFAULT 0,
+                        output_tokens INTEGER DEFAULT 0
+                    )
+                """)
+                cursor.execute("SELECT input_tokens, output_tokens FROM token_usage WHERE id = 1")
+                row = cursor.fetchone()
+                
+                # 만약 기존 대화 메시지 테이블(예: messages)이 있다면 여기서도 긁어옵니다.
+                # (형씨가 쓰시는 대화 기록 테이블명에 맞게 조회합니다. 아래는 예시입니다.)
+                try:
+                    cursor.execute("SELECT role, content FROM messages") # 테이블명이 다르면 변경 가능
+                    db_messages = [{"role": r, "content": c} for r, c in cursor.fetchall()]
+                except Exception:
+                    db_messages = []
+                
                 conn.close()
                 
-                st.success("🎉 복원 성공!")
+                st.success("🎉 복원 성공! 연결 복구 완료.")
                 
-                # 🚨 [초특급 울트라 치트키] 
-                # 기존에 꼬여있던 세션(토큰 0개, 비어있던 대화 기록 등)을 싹 밀어버립니다!
+                # 🚨 세션을 싹 비운 뒤, 방금 업로드한 DB에서 가져온 진짜 값들로 강제 점유합니다!
                 st.session_state.clear()
+                if row:
+                    st.session_state.total_input_tokens = row[0]
+                    st.session_state.total_output_tokens = row[1]
+                if db_messages:
+                    st.session_state.messages = db_messages
                 
-                # 세션을 비웠으니 즉시 새로고침해서 업로드된 chat.db를 깔끔하게 처음부터 다시 읽게 만듭니다.
+                # 완전히 강제 주입된 상태로 새로고침!
                 st.rerun()
                 
             except Exception as e:
@@ -80,7 +107,7 @@ except Exception as e:
     db_input, db_output = 0, 0
     db_system_prompt = ""
 
-# 세션 상태 초기화
+# 세션 상태 초기화 (이미 위에서 복원 주입을 마쳤다면 그 값을 유지하고, 없을 때만 DB에서 로드)
 if "total_input_tokens" not in st.session_state:
     st.session_state.total_input_tokens = db_input
 if "total_output_tokens" not in st.session_state:
