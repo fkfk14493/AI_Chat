@@ -135,15 +135,28 @@ if "messages" not in st.session_state or "messages_uploaded" in st.session_state
         del st.session_state.messages_uploaded
 
 # =======================================================
-# 🎨 [3단계] 저장된 대화 기록을 화면에 그리기
+# 🎨 [3단계] 저장된 대화 기록을 화면에 그리기 (중복 출력 완벽 방어막)
 # =======================================================
 
-# 🚨 이 반복문 코드가 있어야 이전 대화들이 화면에 챡챡 뜹니다!
+# 🚨 화면에 이미 그린 메시지를 체크해서 중복 출력을 완벽하게 차단합니다!
+rendered_keys = set()
+
 for message in st.session_state.messages:
+    # 역할(role)과 대화 내용(content)을 하나로 묶어 고유한 키(Key)로 만듭니다.
+    msg_key = (message["role"], message.get("content", ""))
+    
+    # 🚨 만약 이미 화면에 그린 적이 있는 메시지라면? 가차 없이 패스합니다!
+    if msg_key in rendered_keys:
+        continue
+    
+    # 처음 그리는 메시지라면 기록에 추가하고 화면에 출력합니다.
+    rendered_keys.add(msg_key)
+
     # 사용자 메시지 그리기
     if message["role"] == "user":
         with st.chat_message("user"):
             st.write(message["content"])
+            
     # AI 소고 메시지 그리기
     elif message["role"] == "assistant":
         with st.chat_message("assistant", avatar="sogo.jpg"):
