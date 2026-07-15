@@ -96,48 +96,64 @@ st.markdown("---")
 
 
 # =======================================================
-# 📊 [2단계] 메인 가동 영역 (언제나 안전하게 로드)
+# 🤖 [2단계] 메인 가동 영역 및 세션 초기화 (자동 복구 안전장치)
 # =======================================================
-import db_handler as db
 
-# 🚨 [1단계 방어] 파일이 있든 없든 무조건 테이블 초기화부터 진행!
-try:
-    db.init_db()
-    db_input, db_output = db.load_tokens()
-    
-    # 🚨 [진짜 핵심] 8KB짜리 chat.db에서 시스템 프롬프트를 강제로 가져옵니다!
-    db_system_prompt = db.get_system_prompt("") 
-    
-except Exception as e:
-    st.warning(f"⚠️ DB 연결 안정화 대기 중... ({e})")
-    db_input, db_output = 0, 0
-    db_system_prompt = ""
-
-# 세션 상태 초기화
-if "total_input_tokens" not in st.session_state:
-    st.session_state.total_input_tokens = db_input
-if "total_output_tokens" not in st.session_state:
-    st.session_state.total_output_tokens = db_output
-
-# 만약 기존 세션에 빈 프롬프트가 강제로 물려있다면 진짜 프롬프트로 강제 세팅!
-if "system_prompt" not in st.session_state or st.session_state.system_prompt == "":
-    st.session_state.system_prompt = db_system_prompt
-
-# 🚨 [2배 복사 완벽 진압 보호막]
-# 만약 메모리가 아예 비어있거나 업로드 직후라 초기화가 필요한 경우에만 
-# DB의 내용을 딱 한 벌 복사해 옵니다.
-if "messages" not in st.session_state or "messages_uploaded" in st.session_state:
+# 1. 🚨 [메모리-DB 완벽 동기화] 세션에 메시지가 없거나 비어있다면, 새로고침 시 무조건 DB에서 안전하게 로드합니다!
+if "messages" not in st.session_state or not st.session_state.messages:
     db_messages = db.load_messages()
-    if db_messages:
-        # 중복 방지를 위해 기존 메시지를 지우고 무조건 새로 고침
-        st.session_state.messages = list(db_messages)
-    else:
-        st.session_state.messages = []
-        
-    # 복원용 임시 플래그 제거
-    if "messages_uploaded" in st.session_state:
-        del st.session_state.messages_uploaded
+    st.session_state.messages = db_messages if db_messages else []
 
+# 2. 토큰 및 업로드 신호등 플래그 초기화
+if "messages_uploaded" not in st.session_state:
+    st.session_state.messages_uploaded = False
+
+if "total_input_tokens" not in st.session_state:
+    st.session_state.total_input_tokens = 0
+if "total_output_tokens" not in st.session_state:
+    st.session_state.total_output_tokens = 0
+
+# 3. 제미나이 대화 세션 생성 (이중 생성 방지 및 자동 백업 우회 적용)
+if "chat" not in st.session_state:
+    history_contents = []
+    for m in st.session_state.messages:
+        # 시스템 메시지는 API 대화 히스토리에 주입하지 않고 패스
+        if m["role"] == "system":
+            continue
+            
+        role = "model" if m["role"] == "assistant" else "user"
+        history_contents.append(
+            types.Content(
+                role=role, 
+                parts=[types.Part.from_text(text=m["content"])]
+            )
+        )
+        
+    try:
+        # 1. 3.5 Flash로 접속 시도
+        st.session_state.chat = st.session_state.client.chats.create(
+            model="gemini-3.5-flash",
+            history=history_contents if history_contents else None,
+            config=types.GenerateContentConfig(
+                system_instruction=st.session_state.system_prompt,
+                temperature=0.95,
+            )
+        )
+    except Exception as e:
+        error_msg = str(e)
+        if "503" in error_msg or "UNAVAILABLE" in error_msg or "high demand" in error_msg:
+            # 즉시 3.1 Flash-lite로 우회해서 재시도!
+            st.session_state.chat = st.session_state.client.chats.create(
+                model="gemini-3.1-flash-lite",
+                history=history_contents if history_contents else None,
+                config=types.GenerateContentConfig(
+                    system_instruction=st.session_state.system_prompt,
+                    temperature=0.95,
+                )
+            )
+            st.toast("3.5 모델 혼잡으로 인해 3.1 Flash-lite 모델로 임시 우회 연결되었습니다.")
+        else:
+            raise e
 
 
 # [수정] 브라우저 기본 레이아웃에서 불필요한 여백을 줄이고 깔끔하게 세팅
