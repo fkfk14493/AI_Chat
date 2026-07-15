@@ -336,10 +336,10 @@ for idx, msg in enumerate(st.session_state.messages):
 
 
 # =======================================================
-# 🤖 [4단계] 사용자 입력창 및 통합 대화 처리 구역
+# 🤖 [4단계] 사용자 입력창 및 통합 대화 처리 구역 (완전판)
 # =======================================================
 # 🚨 반드시 🎨 [3단계] 화면에 그리기 반복문보다 "아래쪽"에 위치해야 합니다!
-if user_input := st.chat_input("소고에게 메시지를 보내보세요..."):
+if user_input := st.chat_input("메시지를 입력하세요..."):
     
     # ── [특수 기능 1] 사용자가 '/저장' 이라고 입력했을 때 ──
     if user_input.strip() == "/저장":
@@ -360,7 +360,7 @@ if user_input := st.chat_input("소고에게 메시지를 보내보세요..."):
     # ── [특수 기능 2] 사용자가 '/되돌리기' 이라고 입력했을 때 ──
     elif user_input.strip() == "/되돌리기":
         if len(st.session_state.messages) >= 1:
-            with st.spinner("대화방을 안전하게 동기화하는 중... "):
+            with st.spinner("대화방을 동기화하는 중... "):
                 
                 # 🚨 [지능형 감지] 마지막 메시지가 유저(user)의 것인지, AI(model)의 것인지 판별합니다.
                 last_msg_role = st.session_state.messages[-1]["role"]
@@ -434,18 +434,26 @@ if user_input := st.chat_input("소고에게 메시지를 보내보세요..."):
                 response = st.session_state.chat.send_message(user_input)
                 response_text = response.text
                 
-                # 📊 토큰 수치 가로채기 및 DB 누적
+                # 📊 [수정완료] 잘려있던 괄호와 인자값 완벽 복구!
                 if response.usage_metadata:
                     st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
                     st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
-                    db.update_tokens(st.session_state.total_input_tokens,)
+                    db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
+            else:
+                raise e
         
+        # 3. AI 소고의 새 답변도 세션(메모리)에만 추가!
+        st.session_state.messages.append({"role": "assistant", "content": response_text})
+        
+        # 4. DB에 현재 대화 기록을 통째로 딱 한 번만 저장!
+        db.save_chat(st.session_state.messages)
+
         # ==========================================
-        # 🔥 [새로 탑재된 치트키] 5턴 버퍼 슬라이딩 윈도우 자동 작동 영역
+        # 🔥 5턴 버퍼 슬라이딩 윈도우 자동 작동 영역
         # ==========================================
-        # 메시지가 30개 (나의 대화 15개 + 상대 대화 15개 = 15턴) 쌓였을 때 백그라운드 메모리 정리 작동!
+        # 메시지가 30개 (나의 대화 15개 + 상대 대화 15개 = 15턴) 쌓였을 때 작동!
         if len(st.session_state.messages) >= 30:
-            with st.spinner("예전 기억들을 줄거리로 알차게 요약하는 중..."):
+            with st.spinner("예전 기억들을 요약하는 중..."):
                 
                 # A. 보존할 가장 생생한 최신 5턴 (메시지 10개) 분리
                 keep_messages = st.session_state.messages[-10:]
@@ -462,7 +470,6 @@ if user_input := st.chat_input("소고에게 메시지를 보내보세요..."):
                 # D. 기존에 저장된 줄거리 요약본이 있다면 DB에서 긁어오기
                 existing_summary = ""
                 try:
-                    # db_handler에 구현된 요약본 불러오기 함수 호출 (함수명이 다르면 맞춰서 수정)
                     existing_summary = db.load_summary() 
                 except Exception:
                     existing_summary = ""
@@ -480,7 +487,6 @@ if user_input := st.chat_input("소고에게 메시지를 보내보세요..."):
                 {old_chat_text}
                 """
                 
-                # 메인 챗봇의 대화 흐름을 방해하지 않게 조용히 새 API 호출로 요약만 따옵니다.
                 summary_response = st.session_state.client.models.generate_content(
                     model="gemini-3.5-flash",
                     contents=summary_prompt
@@ -491,7 +497,7 @@ if user_input := st.chat_input("소고에게 메시지를 보내보세요..."):
                 db.save_summary(new_cumulative_summary)
                 
                 # G. 세션 메시지 리셋: 오직 [최신 5턴]만 화면에 남기기
-                st.session_state.messages = keep_messages
+                st.session_state.messages = list(keep_messages)
                 db.save_chat(keep_messages)
                 
                 # H. 제미나이 실제 뇌(API History)에도 요약본 컨텍스트와 최신 5턴만 주입해서 뇌세포 포맷
@@ -525,8 +531,10 @@ if user_input := st.chat_input("소고에게 메시지를 보내보세요..."):
                     )
                 )
                 
-            st.toast("5턴 슬라이딩 윈도우 가동! 오래된 대화가 줄거리 요약본으로 완벽하게 압축되었습니다.")
-            st.rerun()
+            st.toast("5턴 줄거리 요약본으로 완벽하게 압축되었습니다.")
+            
+        # 모든 대화 및 압축 처리가 완료된 후 화면을 갱신시켜 정직하게 1줄만 그리게 만듭니다!
+        st.rerun()
 
 
 # ==========================================
