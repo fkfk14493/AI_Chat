@@ -383,59 +383,58 @@ if user_input := st.chat_input("메시지를 입력하세요"):
                     
     # ── 일반 대화인 경우 (티키타카) ──
     else:
-        # 1. 사용자가 입력한 메시지 화면에 그리기 및 세션 저장
-        with st.chat_message("user"):
-            st.write(user_input)
+        # 🚨 [수정] 화면에 직접 그리던 chat_message 코드를 제거하고, 세션에만 추가합니다!
         st.session_state.messages.append({"role": "user", "content": user_input})
         
-        # ❌ [삭제] 여기서 중복으로 저장하던 db.save_chat 코드를 완전히 지웠습니다!
+        # 답변 생성 영역
+        try:
+            # [시도 1] 3.5 Flash로 대화 시도
+            # (이 부분은 형씨의 원래 세션 chat 호출 방식 그대로 유지합니다!)
+            response = st.session_state.chat.send_message(user_input)
+            response_text = response.text
+            
+            # 📊 [성공] 토큰 수치 가로채기 및 DB 누적
+            if response.usage_metadata:
+                st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
+                st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
+                db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
+            
+        except Exception as e:
+            error_msg = str(e)
+            if "503" in error_msg or "UNAVAILABLE" in error_msg or "high demand" in error_msg:
+                st.toast("3.5 모델 혼잡 감지! 3.1 Flash로 우회합니다.")
+                
+                st.session_state.chat = st.session_state.client.chats.create(
+                    model="gemini-3.1-flash-lite", 
+                    history=st.session_state.chat.get_history(), 
+                    config=types.GenerateContentConfig(
+                        system_instruction=st.session_state.system_prompt,
+                        temperature=0.95
+                    )
+                )
+                
+                # [시도 2] 즉시 재요청!
+                response = st.session_state.chat.send_message(user_input)
+                response_text = response.text
+                
+                # 📊 [대피 성공] 토큰 수치 가로채기 및 DB 누적
+                if response.usage_metadata:
+                    st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
+                    st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
+                    db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
+            else:
+                raise e
         
-        # 2. 답변 생성 및 출력
-        with st.chat_message("assistant", avatar="sogo.jpg"):
-            with st.spinner(""):
-                try:
-                    # [시도 1] 3.5 Flash로 대화 시도
-                    response = st.session_state.chat.send_message(user_input)
-                    response_text = response.text
-                    
-                    # 📊 [성공] 구글 공식 토큰 수치 가로채기!
-                    if response.usage_metadata:
-                        st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
-                        st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
-                        db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
-                    
-                except Exception as e:
-                    error_msg = str(e)
-                    if "503" in error_msg or "UNAVAILABLE" in error_msg or "high demand" in error_msg:
-                        st.toast("3.5 모델 혼잡 감지! 3.1 Flash로 우회합니다.")
-                        
-                        st.session_state.chat = st.session_state.client.chats.create(
-                            model="gemini-3.1-flash-lite", 
-                            history=st.session_state.chat.get_history(), 
-                            config=types.GenerateContentConfig(
-                                system_instruction=st.session_state.system_prompt,
-                                temperature=0.95
-                            )
-                        )
-                        
-                        # [시도 2] 이식된 3.1 뇌세포로 즉시 재요청!
-                        response = st.session_state.chat.send_message(user_input)
-                        response_text = response.text
-                        
-                        # 📊 [대피 성공] 우회 모델의 토큰 수치 가로채기!
-                        if response.usage_metadata:
-                            st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
-                            st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
-                            db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
-                    else:
-                        raise e
-                
-                # 최종 답변 화면 출력 및 세션 저장
-                st.write(response_text)
-                st.session_state.messages.append({"role": "assistant", "content": response_text})
-                
-                # 🚨 [최종 승리의 열쇠] 유저 질문 + 답변이 완전히 끝난 지금 이 순간 딱 "한 번만" 저장!
-                db.save_chat(st.session_state.messages)
+        # 🚨 [수정] AI 답변도 화면에 직접 그리지 않고 세션에만 추가합니다!
+        st.session_state.messages.append({"role": "assistant", "content": response_text})
+        
+        # DB에 최종 상태 딱 한 번 깔끔하게 저장!
+        db.save_chat(st.session_state.messages)
+        
+        # 🚨 [핵심 치트키] 대화 저장이 끝났으니 즉시 화면을 갱신(Rerun)시킵니다!
+        # 그러면 페이지가 처음부터 다시 실행되면서 위의 [3단계] 반복문이 
+        # 방금 나눈 대화까지 포함해 1줄씩 예쁘게 화면에 쫙 그려줍니다!
+        st.rerun()
         
         # ==========================================
         # 🔥 [새로 탑재된 치트키] 5턴 버퍼 슬라이딩 윈도우 자동 작동 영역
