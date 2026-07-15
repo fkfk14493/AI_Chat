@@ -609,3 +609,7 @@ with st.sidebar:
         db.save_chat([])
         st.success("대화 기록이 완벽하게 초기화되었습니다!")
         st.rerun()
+
+
+
+st.write(f"테스트 값 출력: {db.TEST_VAL}")
