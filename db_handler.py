@@ -124,3 +124,59 @@ def get_system_prompt(default_prompt):
     conn.close()
     save_system_prompt(default_prompt)
     return default_prompt
+
+
+# [DB 초기화 시 테이블 생성 영역에 추가]
+def init_db():
+    conn = sqlite3.connect("chat_history.db")
+    cursor = conn.cursor()
+    # ... 기존 대화 저장 테이블 생성 코드 ...
+    
+    # 📊 토큰 저장용 테이블 추가 (없으면 생성)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS token_usage (
+            id INTEGER PRIMARY KEY,
+            input_tokens INTEGER DEFAULT 0,
+            output_tokens INTEGER DEFAULT 0
+        )
+    """)
+    # 기본값 행 1개 삽입 (최초 1회만)
+    cursor.execute("INSERT OR IGNORE INTO token_usage (id, input_tokens, output_tokens) VALUES (1, 0, 0)")
+
+    # 🚨 2. [여기에 추가!] 토큰 테이블이 없으면 만들어줍니다.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS token_usage (
+            id INTEGER PRIMARY KEY,
+            input_tokens INTEGER DEFAULT 0,
+            output_tokens INTEGER DEFAULT 0
+        )
+    """)
+    
+    # 🚨 3. [여기에 추가!] 기본값 행 1개 삽입 (id가 1인 행이 이미 없으면 기본 0, 0으로 생성)
+    cursor.execute("INSERT OR IGNORE INTO token_usage (id, input_tokens, output_tokens) VALUES (1, 0, 0)")
+    
+    conn.commit()
+    conn.close()
+
+# 📊 토큰 사용량 업데이트 함수
+def update_tokens(input_tokens, output_tokens):
+    conn = sqlite3.connect("chat_history.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE token_usage 
+        SET input_tokens = ?, output_tokens = ? 
+        WHERE id = 1
+    """, (input_tokens, output_tokens))
+    conn.commit()
+    conn.close()
+
+# 📊 토큰 사용량 불러오기 함수
+def load_tokens():
+    conn = sqlite3.connect("chat_history.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT input_tokens, output_tokens FROM token_usage WHERE id = 1")
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return row[0], row[1]
+    return 0, 0
