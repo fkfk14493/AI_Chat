@@ -1,4 +1,6 @@
 import streamlit as st
+from google import genai
+from google.genai import types
 import os
 
 # =======================================================
@@ -23,12 +25,12 @@ with st.expander("🚨 [긴급 상황] 대화 기록 백업 및 복원 도구", 
         uploaded_db = st.file_uploader("📤 백업본 업로드하기", type=["db"], label_visibility="collapsed")
         
         if uploaded_db is not None:
-            # 안전하게 기존 연결 방해 안 되게 파일 쓰기
+            # 기존 연결 방해 안 되게 안전하게 파일 쓰기
             with open("chat_history.db", "wb") as f:
                 f.write(uploaded_db.getbuffer())
             st.success("🎉 복원 완료! 새로고침(F5) 해주세요.")
             
-            # 🚨 [치트키] 세션에 복원 완료를 마크하고 앱을 즉시 멈춥니다.
+            # 세션에 복원 완료 마크하고 앱을 즉시 멈춥니다.
             st.session_state["db_restored"] = True
             st.stop()  # 밑으로 절대 안 내려가게 멱살 잡고 멈춤!
 
@@ -57,6 +59,7 @@ if "total_input_tokens" not in st.session_state:
     st.session_state.total_input_tokens = db_input
 if "total_output_tokens" not in st.session_state:
     st.session_state.total_output_tokens = db_output
+
 
 # [수정] 브라우저 기본 레이아웃에서 불필요한 여백을 줄이고 깔끔하게 세팅
 st.set_page_config(page_title="Chatting", layout="centered")
