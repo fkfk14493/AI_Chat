@@ -97,19 +97,27 @@ st.markdown("---")
 
 
 # =======================================================
-# 🤖 [2단계] 메인 가동 영역 및 세션 초기화 (자동 복구 및 순서 완벽 정렬 버전)
+# 🤖 [2단계] 메인 가동 영역 및 세션 초기화 (순서 완벽 정렬 및 에러 차단판)
 # =======================================================
 
-# 🚨 [초특급 중요] 제미나이 API 클라이언트(client)를 1순위로 가장 먼저 초기화합니다!
+# 1. 🚨 [최우선] 제미나이 API 클라이언트(client)를 가장 먼저 초기화합니다!
 if "client" not in st.session_state:
     st.session_state.client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
-# 2. [메모리-DB 완벽 동기화] 세션에 메시지가 없거나 비어있다면, 새로고침 시 무조건 DB에서 안전하게 로드합니다!
+# 2. 🚨 [핵심 보안] 세션 프롬프트(system_prompt)를 챗 세션 빌드 전에 무조건 먼저 확보합니다!
+if "system_prompt" not in st.session_state:
+    # DB에서 프롬프트를 가져오되, 만약 없거나 에러가 나면 빈 문자열("")로 방어합니다.
+    try:
+        st.session_state.system_prompt = db.get_system_prompt("")
+    except Exception:
+        st.session_state.system_prompt = ""
+
+# 3. [메모리-DB 완벽 동기화] 세션에 메시지가 없거나 비어있다면, 새로고침 시 무조건 DB에서 안전하게 로드합니다!
 if "messages" not in st.session_state or not st.session_state.messages:
     db_messages = db.load_messages()
     st.session_state.messages = db_messages if db_messages else []
 
-# 3. 토큰 및 업로드 신호등 플래그 초기화
+# 4. 토큰 및 업로드 신호등 플래그 초기화
 if "messages_uploaded" not in st.session_state:
     st.session_state.messages_uploaded = False
 
@@ -118,7 +126,7 @@ if "total_input_tokens" not in st.session_state:
 if "total_output_tokens" not in st.session_state:
     st.session_state.total_output_tokens = 0
 
-# 4. 제미나이 대화 세션 생성 (이중 생성 방지 및 자동 백업 우회 적용)
+# 5. 제미나이 대화 세션 생성 (이중 생성 방지 및 자동 백업 우회 적용)
 if "chat" not in st.session_state:
     history_contents = []
     for m in st.session_state.messages:
@@ -135,12 +143,12 @@ if "chat" not in st.session_state:
         )
         
     try:
-        # 1. 3.5 Flash로 접속 시도! (위에서 client를 1순위로 만들었으므로 이제 에러가 나지 않습니다!)
+        # 1. 3.5 Flash로 접속 시도!
         st.session_state.chat = st.session_state.client.chats.create(
             model="gemini-3.5-flash",
             history=history_contents if history_contents else None,
             config=types.GenerateContentConfig(
-                system_instruction=st.session_state.system_prompt,
+                system_instruction=st.session_state.system_prompt,  # 👈 이제 상단 2단계에서 확보했으므로 에러가 나지 않습니다!
                 temperature=0.95,
             )
         )
