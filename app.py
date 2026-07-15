@@ -3,10 +3,17 @@ from google import genai
 from google.genai import types
 import db_handler as db
 
+
 # 데이터베이스 초기화 및 기존 대화 기록 불러오기
 db.init_db()
 if "messages" not in st.session_state:
     st.session_state.messages = db.load_chat()
+
+# 세션 상태 초기화 영역 (기존에 messages 같은 거 초기화하는 곳 근처)
+if "total_input_tokens" not in st.session_state:
+    st.session_state.total_input_tokens = 0
+if "total_output_tokens" not in st.session_state:
+    st.session_state.total_output_tokens = 0
 
 # [수정] 브라우저 기본 레이아웃에서 불필요한 여백을 줄이고 깔끔하게 세팅
 st.set_page_config(page_title="Chatting", layout="centered")
@@ -163,12 +170,47 @@ if user_input := st.chat_input("메시지를 입력하세요"):
         st.session_state.messages.append({"role": "user", "content": user_input})
         db.save_chat(st.session_state.messages)
         
-        # 2. 답변 생성 및 출력 (아바타 장착 및 미니멀 스피너)
+        # 2. 답변 생성 및 출력
         with st.chat_message("assistant", avatar="sogo.jpg"):
             with st.spinner(""):
-                response = st.session_state.chat.send_message(user_input)
-                st.write(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
+                try:
+                    # [시도 1] 3.5 Flash로 대화 시도
+                    response = st.session_state.chat.send_message(user_input)
+                    response_text = response.text
+                    
+                    # 📊 [추가] 성공 시 실제 사용된 구글 공식 토큰 수치 가로채기!
+                    if response.usage_metadata:
+                        st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
+                        st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    if "503" in error_msg or "UNAVAILABLE" in error_msg or "high demand" in error_msg:
+                        st.toast("3.5 모델 혼잡 감지! 3.1 Flash로 우회합니다.")
+                        
+                        st.session_state.chat = st.session_state.client.chats.create(
+                            model="gemini-3.1-flash-lite", 
+                            history=st.session_state.chat.get_history(), 
+                            config=types.GenerateContentConfig(
+                                system_instruction=st.session_state.system_prompt,
+                                temperature=0.95
+                            )
+                        )
+                        
+                        # [시도 2] 이식된 3.1 뇌세포로 즉시 재요청!
+                        response = st.session_state.chat.send_message(user_input)
+                        response_text = response.text
+                        
+                        # 📊 [추가] 대피 성공 시에도 실제 사용된 토큰 수 가로채기!
+                        if response.usage_metadata:
+                            st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
+                            st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
+                    else:
+                        raise e
+                
+                # 최종 답변 화면 출력 및 저장
+                st.write(response_text)
+                st.session_state.messages.append({"role": "assistant", "content": response_text})
                 db.save_chat(st.session_state.messages)
 
         # ==========================================
