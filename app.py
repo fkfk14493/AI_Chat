@@ -3,26 +3,6 @@ from google import genai
 from google.genai import types
 import db_handler as db
 
-# 🚨 [임시 해결 치트키] 기존 DB 살리기용 코드 (한 번 실행 후 지울 것!)
-import sqlite3
-try:
-    conn = sqlite3.connect("chat_history.db")
-    cursor = conn.cursor()
-    # 기존 DB에 토큰 저장용 테이블이 없으면 생성합니다.
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS token_usage (
-            id INTEGER PRIMARY KEY,
-            input_tokens INTEGER DEFAULT 0,
-            output_tokens INTEGER DEFAULT 0
-        )
-    """)
-    cursor.execute("INSERT OR IGNORE INTO token_usage (id, input_tokens, output_tokens) VALUES (1, 0, 0)")
-    conn.commit()
-    conn.close()
-    st.toast("✅ 기존 대화 기록을 안전하게 보호하고 토큰 공간을 생성했습니다!")
-except Exception as e:
-    st.error(f"임시 복구 중 오류 발생: {e}")
-
 # 🚨 [여기 중요!] 1. DB와 테이블을 먼저 확실하게 생성/초기화합니다!
 db.init_db()
 
