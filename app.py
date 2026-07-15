@@ -137,7 +137,7 @@ if "chat" not in st.session_state:
         history_contents.append(types.Content(role=role, parts=[types.Part.from_text(text=m["content"])]))
         
     st.session_state.chat = st.session_state.client.chats.create(
-        model="gemini-2.5-flash",
+        model="gemini-3.1-pro",
         history=history_contents if history_contents else None,
         config=types.GenerateContentConfig(
             system_instruction=char_persona,
@@ -340,7 +340,7 @@ with st.sidebar:
         
         # 1. 새 프롬프트로 제미나이 세션 새로 열기
         st.session_state.chat = st.session_state.client.chats.create(
-            model="gemini-2.5-flash",
+            model="gemini-3.1-pro",
             config=types.GenerateContentConfig(
                 system_instruction=st.session_state.system_prompt
             )
