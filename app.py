@@ -37,7 +37,11 @@ if "system_prompt" not in st.session_state:
 if "chat" not in st.session_state:
     history_contents = []
     for m in st.session_state.messages:
-        # DB handler나 세션 구조에 맞게 user/model 역할을 매핑합니다.
+        # 🚨 [추가] 시스템 메시지(요약본)는 API 대화 히스토리에 직접 주입하지 않고 패스합니다!
+        # (시스템 지침은 아래 GenerateContentConfig의 system_instruction으로만 들어가는 게 안전합니다.)
+        if m["role"] == "system":
+            continue
+            
         role = "model" if m["role"] == "assistant" else "user"
         history_contents.append(
             types.Content(
@@ -47,14 +51,13 @@ if "chat" not in st.session_state:
         )
         
     st.session_state.chat = st.session_state.client.chats.create(
-        model="gemini-3.5-flash", # 원하는 모델 명으로 통일
+        model="gemini-3.5-flash", # 3.5 Flash로 안전하게 빌드!
         history=history_contents if history_contents else None,
         config=types.GenerateContentConfig(
             system_instruction=st.session_state.system_prompt, # 🧠 DB에서 가져온 뇌 주입!
             temperature=0.95,
         )
     )
-
 # ── [기존 출력 영역 교체] ──
 # 웹 화면에 대화 기록만 순수하게 출력
 for idx, msg in enumerate(st.session_state.messages):
