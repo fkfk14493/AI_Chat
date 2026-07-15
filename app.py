@@ -25,14 +25,27 @@ with st.expander("🚨 [긴급 상황] 대화 기록 백업 및 복원 도구", 
         uploaded_db = st.file_uploader("📤 백업본 업로드하기", type=["db"], label_visibility="collapsed")
         
         if uploaded_db is not None:
-            # 기존 연결 방해 안 되게 안전하게 파일 쓰기
+            # 안전하게 파일 덮어쓰기
             with open("chat_history.db", "wb") as f:
                 f.write(uploaded_db.getbuffer())
-            st.success("🎉 복원 완료! 새로고침(F5) 해주세요.")
             
-            # 세션에 복원 완료 마크하고 앱을 즉시 멈춥니다.
+            st.success("🎉 DB 파일 복원 완료!")
+            
+            # 🚨 [여기 중요] 복원하자마자 테이블 생성 함수 강제 주입 후 세션 정리!
+            try:
+                import db_handler as db
+                db.init_db()  # 업로드한 파일에 강제로 테이블 연결 복구
+                st.info("테이블 연결을 복구했습니다.")
+            except Exception as e:
+                st.warning(f"테이블 연결 중 알림: {e}")
+                
             st.session_state["db_restored"] = True
-            st.stop()  # 밑으로 절대 안 내려가게 멱살 잡고 멈춤!
+            
+            # 강제로 Rerun 시킬 수 있는 버튼을 노출시킵니다.
+            if st.button("🔄 즉시 서버 연결 새로고침하기 (클릭!)"):
+                st.rerun()
+                
+            st.stop()  # 아래 코드 절대 못 읽게 막기
 
 st.markdown("---")
 
@@ -40,18 +53,23 @@ st.markdown("---")
 # =======================================================
 # 📊 [2단계] 복원이 완벽하게 끝난 후 "안전"할 때만 구동되는 영역
 # =======================================================
-# 업로드가 방금 완료되었거나, 아직 파일 업로드 중이라면 아래 코드를 실행하지 않습니다!
 if "db_restored" in st.session_state and st.session_state["db_restored"]:
-    st.info("🔄 DB 복원이 완료되었습니다. 정상 가동을 위해 페이지를 새로고침(F5) 해주세요!")
+    st.info("🔄 DB 복원이 완료되었습니다. 정상 작동을 위해 '즉시 서버 연결 새로고침' 버튼을 누르거나 새로고침(F5)을 해주세요!")
     st.stop()
 
-# 이제 정말 안전할 때만 db_handler를 임포트하고 실행합니다.
-import db_handler as db  # 👈 임포트 시점 자체를 뒤로 늦췄습니다!
+# 정말 안전하고 조용할 때 임포트
+import db_handler as db
 
-if os.path.exists("chat_history.db"):
-    db.init_db()  # 안전하게 테이블 생성/확인
-    db_input, db_output = db.load_tokens()
-else:
+# 🚨 'no such table'을 원천 봉쇄하는 안전 장치
+try:
+    if os.path.exists("chat_history.db"):
+        db.init_db()  # DB와 테이블을 먼저 확실하게 생성/초기화합니다!
+        db_input, db_output = db.load_tokens()
+    else:
+        db_input, db_output = 0, 0
+except Exception as e:
+    # 💥 에러가 나면 뻗지 말고 조용히 0으로 세팅해서 살려놓기!
+    st.warning(f"⚠️ DB 연결 안정화 대기 중: {e}")
     db_input, db_output = 0, 0
 
 # 세션 상태(Session State) 초기화
