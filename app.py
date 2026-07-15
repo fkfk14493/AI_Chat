@@ -52,7 +52,7 @@ with st.expander("🛠️ 데이터 백업 및 복원", expanded=False):
                 cursor = conn.cursor()
                 
                 # 🚨 [메모리 강제 동기화 치트키]
-                # 서버가 깃허브 파일로 되돌리기 전에, 업로드된 파일에서 토큰 정보를 미리 선점해서 세션에 꽂아 넣습니다!
+                # 테이블이 없을 경우를 대비해 토큰용 테이블 강제 생성
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS token_usage (
                         id INTEGER PRIMARY KEY,
@@ -63,10 +63,9 @@ with st.expander("🛠️ 데이터 백업 및 복원", expanded=False):
                 cursor.execute("SELECT input_tokens, output_tokens FROM token_usage WHERE id = 1")
                 row = cursor.fetchone()
                 
-                # 만약 기존 대화 메시지 테이블(예: messages)이 있다면 여기서도 긁어옵니다.
-                # (형씨가 쓰시는 대화 기록 테이블명에 맞게 조회합니다. 아래는 예시입니다.)
+                # 🚨 [중요 피드백 반영] 옛날 테이블명 messages -> chat_history로 긴급 변경!!!
                 try:
-                    cursor.execute("SELECT role, content FROM messages") # 테이블명이 다르면 변경 가능
+                    cursor.execute("SELECT role, content FROM chat_history ORDER BY id ASC")
                     db_messages = [{"role": r, "content": c} for r, c in cursor.fetchall()]
                 except Exception:
                     db_messages = []
@@ -75,15 +74,18 @@ with st.expander("🛠️ 데이터 백업 및 복원", expanded=False):
                 
                 st.success("🎉 복원 성공! 연결 복구 완료.")
                 
-                # 🚨 세션을 싹 비운 뒤, 방금 업로드한 DB에서 가져온 진짜 값들로 강제 점유합니다!
+                # 🚨 [중복 원천 차단] 세션을 완전히 깨끗하게 밀어버린 뒤 업로드한 알맹이만 강제 점유!
                 st.session_state.clear()
+                
                 if row:
                     st.session_state.total_input_tokens = row[0]
                     st.session_state.total_output_tokens = row[1]
                 if db_messages:
-                    st.session_state.messages = db_messages
+                    st.session_state.messages = list(db_messages)  # 👈 중복 방지를 위한 안전 복사
+                else:
+                    st.session_state.messages = []
                 
-                # 완전히 강제 주입된 상태로 새로고침!
+                # 완전히 강제 주입된 깨끗한 상태로 새로고침!
                 st.rerun()
                 
             except Exception as e:
@@ -116,22 +118,19 @@ if "total_input_tokens" not in st.session_state:
 if "total_output_tokens" not in st.session_state:
     st.session_state.total_output_tokens = db_output
 
-# 🚨 [여기 집중!] 만약 기존 세션에 빈 프롬프트("")가 강제로 물려있다면 
-# 새롭게 가져온 8KB DB 안의 진짜 프롬프트(db_system_prompt)로 강제로 갈아 끼웁니다!
+# 만약 기존 세션에 빈 프롬프트가 강제로 물려있다면 진짜 프롬프트로 강제 세팅!
 if "system_prompt" not in st.session_state or st.session_state.system_prompt == "":
     st.session_state.system_prompt = db_system_prompt
 
-# 🚨 [수정] 대화 메시지 세션 주입 로직 개조!
+# 🚨 [대화 2배 복사 버그 완전 격파] 
+# 세션에 대화 메시지 변수가 아예 등록되지 않은 경우("messages" not in st.session_state)에만 딱 한번 로드!
 if "messages" not in st.session_state:
-    # ❌ 기존: st.session_state.messages = []
-    # ✅ 변경: DB에서 불러온 진짜 대화 기록(db.load_messages)을 쑤셔 넣습니다!
-    
     db_messages = db.load_messages()
     if db_messages:
-        st.session_state.messages = db_messages
+        st.session_state.messages = list(db_messages)
     else:
-        st.session_state.messages = [] # DB에 아무것도 없으면 빈 리스트로 초기화
-
+        st.session_state.messages = []
+        
 # =======================================================
 # 🎨 [3단계] 저장된 대화 기록을 화면에 그리기
 # =======================================================
