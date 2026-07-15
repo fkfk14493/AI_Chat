@@ -383,13 +383,12 @@ if user_input := st.chat_input("메시지를 입력하세요"):
                     
     # ── 일반 대화인 경우 (티키타카) ──
     else:
-        # 1. 사용자가 입력한 메시지 화면에 그리기 및 저장
+        # 1. 사용자가 입력한 메시지 화면에 그리기 및 세션 저장
         with st.chat_message("user"):
             st.write(user_input)
         st.session_state.messages.append({"role": "user", "content": user_input})
         
-        # 🚨 [수정] 사용자가 메시지 보낸 시점에 즉시 대화 내역 저장!
-        db.save_chat(st.session_state.messages)
+        # ❌ [삭제] 여기서 중복으로 저장하던 db.save_chat 코드를 완전히 지웠습니다!
         
         # 2. 답변 생성 및 출력
         with st.chat_message("assistant", avatar="sogo.jpg"):
@@ -403,8 +402,6 @@ if user_input := st.chat_input("메시지를 입력하세요"):
                     if response.usage_metadata:
                         st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
                         st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
-
-                        # 🚨 [추가] 3.5 성공 시 토큰 DB 실시간 누적!
                         db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
                     
                 except Exception as e:
@@ -429,8 +426,6 @@ if user_input := st.chat_input("메시지를 입력하세요"):
                         if response.usage_metadata:
                             st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
                             st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
-                            
-                            # 🚨 [추가] 3.1 대피 성공 시 토큰 DB 실시간 누적!
                             db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
                     else:
                         raise e
@@ -439,9 +434,9 @@ if user_input := st.chat_input("메시지를 입력하세요"):
                 st.write(response_text)
                 st.session_state.messages.append({"role": "assistant", "content": response_text})
                 
-                # 🚨 [수정] AI답변이 완전히 완성된 시점에 최종 대화 내역 갱신 저장!
+                # 🚨 [최종 승리의 열쇠] 유저 질문 + 답변이 완전히 끝난 지금 이 순간 딱 "한 번만" 저장!
                 db.save_chat(st.session_state.messages)
-
+        
         # ==========================================
         # 🔥 [새로 탑재된 치트키] 5턴 버퍼 슬라이딩 윈도우 자동 작동 영역
         # ==========================================
