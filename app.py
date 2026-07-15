@@ -398,47 +398,47 @@ with st.sidebar:
 
     st.markdown("---")
 
-   # ==========================================
-    # 2. 🔍 과거 대화 검색 기능 (순간이동 링크 버전)
-    # ==========================================
-    search_query = st.text_input("🔍 과거 대화 검색 (단어 입력):", placeholder="찾을 단어를 입력하고 Enter...")
+# ==========================================
+# 2. 🔍 과거 대화 검색 기능 (순간이동 링크 버전)
+# ==========================================
+search_query = st.text_input("🔍 과거 대화 검색 (단어 입력):", placeholder="찾을 단어를 입력하고 Enter...")
 
-    if search_query:
-        st.write(f"**'{search_query}' 검색 결과:**")
-        found_any = False
-        
-        # 전체 대화 내역을 돌면서 키워드가 포함되어 있는지 샅샅이 뒤집니다.
-        for idx, msg in enumerate(st.session_state.messages):
-            if search_query.lower() in msg["content"].lower():
-                found_any = True
-                role_name = "나" if msg["role"] == "user" else "상대"
+if search_query:
+    st.write(f"**'{search_query}' 검색 결과:**")
+    found_any = False
+    
+    # 전체 대화 내역을 돌면서 키워드가 포함되어 있는지 샅샅이 뒤집니다.
+    for idx, msg in enumerate(st.session_state.messages):
+        if search_query.lower() in msg["content"].lower():
+            found_any = True
+            role_name = "나" if msg["role"] == "user" else "상대"
+            
+            # 검색된 대화 조각들을 보여줍니다.
+            with st.expander(f"💬 [{role_name}]의 대화에서 발견"):
+                st.write(msg["content"])
                 
-                # 검색된 대화 조각들을 보여줍니다.
-                with st.expander(f"💬 [{role_name}]의 대화에서 발견"):
-                    st.write(msg["content"])
-                    
-                    # [순간이동 치트키 버튼]
-                    # HTML <a> 태그를 이용해 클릭 시 해당 메시지 ID 위치로 브라우저 스크롤을 이동시킵니다.
-                    st.markdown(
-                        f"""
-                        <a href="#message-{idx}" target="_self" style="
-                            display: inline-block;
-                            padding: 0.4rem 0.8rem;
-                            color: white;
-                            background-color: #FF4B4B;
-                            text-decoration: none;
-                            border-radius: 5px;
-                            font-size: 0.85rem;
-                            font-weight: bold;
-                            text-align: center;
-                            margin-top: 5px;
-                        "해당 위치로 이동</a>
-                        """,
-                        unsafe_allow_html=True
-                    )
-        
-        if not found_any:
-            st.warning("검색 결과가 없습니다.")
+                # [순간이동 치트키 버튼]
+                # 🚨 오타 수정 완료: style 따옴표 뒤에 '>' 기호를 똑바로 닫아주었습니다!
+                st.markdown(
+                    f"""
+                    <a href="#message-{idx}" target="_self" style="
+                        display: inline-block;
+                        padding: 0.4rem 0.8rem;
+                        color: white;
+                        background-color: #FF4B4B;
+                        text-decoration: none;
+                        border-radius: 5px;
+                        font-size: 0.85rem;
+                        font-weight: bold;
+                        text-align: center;
+                        margin-top: 5px;
+                    ">해당 위치로 이동</a>
+                    """,
+                    unsafe_allow_html=True
+                )
+    
+    if not found_any:
+        st.warning("검색 결과가 없습니다.")
 
     st.divider() # 얇은 가로선 하나 그어주기
 
