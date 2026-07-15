@@ -318,10 +318,11 @@ for idx, msg in enumerate(st.session_state.messages):
                         st.rerun()
 
 
-# ==========================================
-# 사용자 입력 및 명령어 처리 영역 (들여쓰기 및 모순 완벽 수정본)
-# ==========================================
-if user_input := st.chat_input("메시지를 입력하세요"):
+# =======================================================
+# 🤖 [4단계] 사용자 입력창 및 통합 대화 처리 구역
+# =======================================================
+# 🚨 반드시 🎨 [3단계] 화면에 그리기 반복문보다 "아래쪽"에 위치해야 합니다!
+if user_input := st.chat_input("소고에게 메시지를 보내보세요..."):
     
     # ── [특수 기능 1] 사용자가 '/저장' 이라고 입력했을 때 ──
     if user_input.strip() == "/저장":
@@ -334,7 +335,7 @@ if user_input := st.chat_input("메시지를 입력하세요"):
                 summary_response = st.session_state.chat.send_message(summary_prompt)
                 summary_text = summary_response.text
                 
-                db.save_summary(summary_text) # DB에 요약본 저장
+                db.save_summary(summary_text)  # DB에 요약본 저장
                 
                 st.success("지금까지의 줄거리가 저장되었습니다.")
                 st.info(f"**현재 줄거리 요약:**\n{summary_text}")
@@ -380,20 +381,19 @@ if user_input := st.chat_input("메시지를 입력하세요"):
             st.rerun()
         else:
             st.warning("되돌릴 대화 기록이 없습니다.")
-                    
-    # ── 일반 대화인 경우 (티키타카) ──
+            
+    # ── [일반 대화] 특수 명령어가 아닌 일반 티키타카일 때 ──
     else:
-        # 🚨 [수정] 화면에 직접 그리던 chat_message 코드를 제거하고, 세션에만 추가합니다!
+        # 1. 사용자의 새 질문을 세션(메모리)에만 추가! (화면에 직접 그리지 않음)
         st.session_state.messages.append({"role": "user", "content": user_input})
         
-        # 답변 생성 영역
+        # 2. 답변 생성 영역
         try:
             # [시도 1] 3.5 Flash로 대화 시도
-            # (이 부분은 형씨의 원래 세션 chat 호출 방식 그대로 유지합니다!)
             response = st.session_state.chat.send_message(user_input)
             response_text = response.text
             
-            # 📊 [성공] 토큰 수치 가로채기 및 DB 누적
+            # 📊 토큰 수치 가로채기 및 DB 누적
             if response.usage_metadata:
                 st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
                 st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
@@ -417,24 +417,11 @@ if user_input := st.chat_input("메시지를 입력하세요"):
                 response = st.session_state.chat.send_message(user_input)
                 response_text = response.text
                 
-                # 📊 [대피 성공] 토큰 수치 가로채기 및 DB 누적
+                # 📊 토큰 수치 가로채기 및 DB 누적
                 if response.usage_metadata:
                     st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
                     st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
-                    db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
-            else:
-                raise e
-        
-        # 🚨 [수정] AI 답변도 화면에 직접 그리지 않고 세션에만 추가합니다!
-        st.session_state.messages.append({"role": "assistant", "content": response_text})
-        
-        # DB에 최종 상태 딱 한 번 깔끔하게 저장!
-        db.save_chat(st.session_state.messages)
-        
-        # 🚨 [핵심 치트키] 대화 저장이 끝났으니 즉시 화면을 갱신(Rerun)시킵니다!
-        # 그러면 페이지가 처음부터 다시 실행되면서 위의 [3단계] 반복문이 
-        # 방금 나눈 대화까지 포함해 1줄씩 예쁘게 화면에 쫙 그려줍니다!
-        st.rerun()
+                    db.update_tokens(st.session_state.total_input_tokens,
         
         # ==========================================
         # 🔥 [새로 탑재된 치트키] 5턴 버퍼 슬라이딩 윈도우 자동 작동 영역
