@@ -2,6 +2,7 @@ import streamlit as st
 from google import genai
 from google.genai import types
 import db_handler as db
+import db
 
 
 # 데이터베이스 초기화 및 기존 대화 기록 불러오기
@@ -14,6 +15,14 @@ if "total_input_tokens" not in st.session_state:
     st.session_state.total_input_tokens = 0
 if "total_output_tokens" not in st.session_state:
     st.session_state.total_output_tokens = 0
+
+# DB에서 토큰 사용량 불러오기
+db_input, db_output = db.load_tokens()
+
+if "total_input_tokens" not in st.session_state:
+    st.session_state.total_input_tokens = db_input
+if "total_output_tokens" not in st.session_state:
+    st.session_state.total_output_tokens = db_output
 
 # [수정] 브라우저 기본 레이아웃에서 불필요한 여백을 줄이고 깔끔하게 세팅
 st.set_page_config(page_title="Chatting", layout="centered")
@@ -97,6 +106,90 @@ for idx, msg in enumerate(st.session_state.messages):
     
     with st.chat_message(msg["role"], avatar=avatar_image):
         st.write(msg["content"])
+        
+        # ==========================================
+        # 🟢 [내 질문 수정 영역] 
+        # 내 마지막 질문 말풍선 아래에만 노출 (재전송 및 과거 개편)
+        # ==========================================
+        if msg["role"] == "user" and idx == len(st.session_state.messages) - 2:
+            with st.popover("다시 보내기"):
+                edited_text = st.text_area("내용을 입력하세요:", value=msg["content"], key=f"edit_user_{idx}")
+                
+                if st.button("확인", key=f"btn_user_{idx}", use_container_width=True):
+                    if edited_text.strip() and edited_text.strip() != msg["content"]:
+                        with st.spinner("수정 중..."):
+                            st.session_state.messages.pop()
+                            st.session_state.messages.pop()
+                            
+                            if hasattr(st.session_state.chat, "history") and st.session_state.chat.history:
+                                st.session_state.chat.history = st.session_state.chat.history[:-2]
+                            if hasattr(st.session_state.chat, "_history") and st.session_state.chat._history:
+                                st.session_state.chat._history = st.session_state.chat._history[:-2]
+                            
+                            st.session_state.messages.append({"role": "user", "content": edited_text})
+                            db.save_chat(st.session_state.messages)
+                            
+                            try:
+                                response = st.session_state.chat.send_message(edited_text)
+                                response_text = response.text
+                                if response.usage_metadata:
+                                    st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
+                                    st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
+                                    db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
+                                    
+                            except Exception as e:
+                                error_msg = str(e)
+                                if "503" in error_msg or "UNAVAILABLE" in error_msg or "high demand" in error_msg:
+                                    st.toast("3.5 모델 혼잡 감지! 3.1 Flash로 우회합니다.")
+                                    st.session_state.chat = st.session_state.client.chats.create(
+                                        model="gemini-3.1-flash-lite", 
+                                        history=st.session_state.chat.get_history(), 
+                                        config=types.GenerateContentConfig(
+                                            system_instruction=st.session_state.system_prompt,
+                                            temperature=0.95
+                                        )
+                                    )
+                                    response = st.session_state.chat.send_message(edited_text)
+                                    response_text = response.text
+                                    if response.usage_metadata:
+                                        st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
+                                        st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
+                                        db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
+                                else:
+                                    raise e
+                            
+                            st.session_state.messages.append({"role": "assistant", "content": response_text})
+                            db.save_chat(st.session_state.messages)
+                            st.toast("마지막 대화가 수정 및 갱신되었습니다!")
+                            st.rerun()
+
+        # ==========================================
+        # 🔴 [신규 추가: 대답 다듬기 영역] 
+        # 마지막 대답 말풍선 아래에만 노출 (서버 요청 없이 텍스트만 다듬기)
+        # ==========================================
+        elif msg["role"] == "assistant" and idx == len(st.session_state.messages) - 1:
+            with st.popover("수정하기"):
+                # 현재 소고가 뱉은 대사를 텍스트 영역에 띄워줍니다.
+                refined_text = st.text_area("수정 내용:", value=msg["content"], key=f"refine_sogo_{idx}", height=150)
+                
+                if st.button("확인", key=f"btn_refine_{idx}", use_container_width=True):
+                    if refined_text.strip() and refined_text.strip() != msg["content"]:
+                        # 1️⃣ 세션 메모리에서 기존 소고 대답 갈아끼우기
+                        st.session_state.messages[idx]["content"] = refined_text
+                        
+                        # 2️⃣ 제미나이 뇌세포(history) 내부의 대화 기록도 강제로 수정하기
+                        if hasattr(st.session_state.chat, "history") and st.session_state.chat.history:
+                            # 제미나이의 마지막 내역(model 역할)의 텍스트 파트를 수정한 텍스트로 치환합니다.
+                            st.session_state.chat.history[-1].parts[0].text = refined_text
+                        
+                        if hasattr(st.session_state.chat, "_history") and st.session_state.chat._history:
+                            st.session_state.chat._history[-1].parts[0].text = refined_text
+                        
+                        # 3️⃣ 동기화된 완벽한 대화 데이터를 DB에 최종 저장
+                        db.save_chat(st.session_state.messages)
+                        
+                        st.toast("수정이 완료되었습니다.")
+                        st.rerun()
 
 
 # ==========================================
@@ -182,6 +275,9 @@ if user_input := st.chat_input("메시지를 입력하세요"):
                     if response.usage_metadata:
                         st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
                         st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
+
+                        # 1) 대화가 무사히 끝나고 토큰이 누적되는 지점들 뒤에 아래 코드 한 줄씩 끼워넣기!
+                        db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
                     
                 except Exception as e:
                     error_msg = str(e)
@@ -307,6 +403,46 @@ if user_input := st.chat_input("메시지를 입력하세요"):
 # ==========================================
 with st.sidebar:
     st.title("⚙️ 설정 및 관리")
+    st.markdown("---")
+
+    st.subheader("🧭 화면 순간이동")
+    
+    # 가로로 정렬된 예쁜 버튼 2개 배치
+    nav_col1, nav_col2 = st.columns(2)
+    with nav_col1:
+        st.markdown(
+            """
+            <a href="#top-anchor" target="_self" style="
+                display: block;
+                padding: 0.5rem;
+                color: white;
+                background-color: #4B90FF;
+                text-decoration: none;
+                border-radius: 5px;
+                font-size: 0.85rem;
+                font-weight: bold;
+                text-align: center;
+            ">⬆️ 맨 위로</a>
+            """,
+            unsafe_allow_html=True
+        )
+    with nav_col2:
+        st.markdown(
+            """
+            <a href="#bottom-anchor" target="_self" style="
+                display: block;
+                padding: 0.5rem;
+                color: white;
+                background-color: #4B90FF;
+                text-decoration: none;
+                border-radius: 5px;
+                font-size: 0.85rem;
+                font-weight: bold;
+                text-align: center;
+            ">⬇️ 맨 아래로</a>
+            """,
+            unsafe_allow_html=True
+        )
     
     st.markdown("---")
     st.subheader("📝 프롬프트 설정")
