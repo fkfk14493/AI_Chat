@@ -137,7 +137,7 @@ if "chat" not in st.session_state:
         history_contents.append(types.Content(role=role, parts=[types.Part.from_text(text=m["content"])]))
         
     st.session_state.chat = st.session_state.client.chats.create(
-        model="gemini-2.5-pro",
+        model="gemini-2.5-flash",
         history=history_contents if history_contents else None,
         config=types.GenerateContentConfig(
             system_instruction=char_persona,
@@ -340,7 +340,7 @@ with st.sidebar:
         
         # 1. 새 프롬프트로 제미나이 세션 새로 열기
         st.session_state.chat = st.session_state.client.chats.create(
-            model="gemini-2.5-pro",
+            model="gemini-2.5-flash",
             config=types.GenerateContentConfig(
                 system_instruction=st.session_state.system_prompt
             )
@@ -379,7 +379,6 @@ with st.sidebar:
         for msg in st.session_state.messages:
             role_name = "나" if msg["role"] == "user" else "오키타 소고"
             export_text += f"[{role_name}]\n{msg['content']}\n\n"
-            export_text += "─" * 30 + "\n\n" # 대화 구분선
             
         # 스트림릿 자체 다운로드 버튼 기능을 이용해 폰/PC로 즉시 다운로드!
         st.download_button(
