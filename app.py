@@ -3,20 +3,6 @@ from google import genai
 from google.genai import types
 import db_handler as db
 
-# 🚨 [초비상 대피용] DB 다운로드 버튼 (기록 백업 완료되면 지울 것!)
-import os
-import streamlit as st
-
-if os.path.exists("chat_history.db"):
-    with open("chat_history.db", "rb") as f:
-        st.download_button(
-            label="💾 [여기를 클릭해서 기존 대화 기록 다운로드 받기]",
-            data=f,
-            file_name="chat_history.db",
-            mime="application/octet-stream"
-        )
-st.warning("⚠️ 위 버튼을 눌러 DB를 컴퓨터에 안전하게 다운로드한 뒤, 코드를 정상 수정해 주세요!")
-
 # 🚨 [여기 중요!] 1. DB와 테이블을 먼저 확실하게 생성/초기화합니다!
 db.init_db()
 
