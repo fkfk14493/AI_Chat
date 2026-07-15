@@ -56,24 +56,20 @@ st.markdown("---")
 
 
 # =======================================================
-# 📊 [2단계] 복원이 완벽하게 끝난 후 "안전"할 때만 구동되는 영역
+# 📊 [2단계] 복원이 완벽하게 끝난 후 정상 가동 영역
 # =======================================================
 if "db_restored" in st.session_state and st.session_state["db_restored"]:
-    st.info("🔄 DB 복원이 완료되었습니다. 정상 작동을 위해 '즉시 서버 연결 새로고침' 버튼을 누르거나 새로고침(F5)을 해주세요!")
+    st.info("🔄 DB 복원이 완료되었습니다. 페이지를 새로고침(F5) 해주세요!")
     st.stop()
 
-# 정말 안전하고 조용할 때 임포트
 import db_handler as db
 
-# 🚨 'no such table'을 원천 봉쇄하는 안전 장치
+# 🚨 [해결책] 파일이 있든 없든 무조건 init_db()를 실행해서 
+# 기존 메시지 테이블과 토큰 테이블을 안전하게 생성해 둡니다!
 try:
-    if os.path.exists("chat_history.db"):
-        db.init_db()  # DB와 테이블을 먼저 확실하게 생성/초기화합니다!
-        db_input, db_output = db.load_tokens()
-    else:
-        db_input, db_output = 0, 0
+    db.init_db()  # 👈 이제 파일이 없어도 에러 없이 새 DB와 테이블을 만듭니다!
+    db_input, db_output = db.load_tokens()
 except Exception as e:
-    # 💥 에러가 나면 뻗지 말고 조용히 0으로 세팅해서 살려놓기!
     st.warning(f"⚠️ DB 연결 안정화 대기 중: {e}")
     db_input, db_output = 0, 0
 
