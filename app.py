@@ -440,6 +440,29 @@ with st.sidebar:
         if not found_any:
             st.warning("검색 결과가 없습니다.")
 
+    st.divider() # 얇은 가로선 하나 그어주기
+    
+    st.subheader("📊 실시간 토큰 계기판")
+    
+    # 2열로 나누어서 깔끔하게 지표 표시 (스트림릿 레이아웃)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(
+            label="입력 토큰 (누적)", 
+            value=f"{st.session_state.total_input_tokens:,}", 
+            help="내가 소고에게 보낸 질문과 과거 기억을 합친 글자 수입니다."
+        )
+    with col2:
+        st.metric(
+            label="출력 토큰 (누적)", 
+            value=f"{st.session_state.total_output_tokens:,}", 
+            help="소고가 나에게 뱉어낸 장문 소설 대사의 글자 수입니다."
+        )
+        
+    # 대략적인 예상 요금 계산 (Flash 기준 100만 토큰당 약 $0.075 / $0.30)
+    estimated_cost = (st.session_state.total_input_tokens * 0.000000075) + (st.session_state.total_output_tokens * 0.00000030)
+    st.caption(f"💰 현재 세션 예상 요금: 약 {estimated_cost * 1350:.2f}원 (진짜 껌값이랍죠)")
+
     st.markdown("---")
     st.subheader("위험 구역")
     
