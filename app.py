@@ -51,7 +51,6 @@ with st.expander("🛠️ 데이터 백업 및 복원", expanded=False):
                 conn = sqlite3.connect(DB_PATH)
                 cursor = conn.cursor()
                 
-                # 🚨 [메모리 강제 동기화 치트키]
                 # 테이블이 없을 경우를 대비해 토큰용 테이블 강제 생성
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS token_usage (
@@ -63,7 +62,7 @@ with st.expander("🛠️ 데이터 백업 및 복원", expanded=False):
                 cursor.execute("SELECT input_tokens, output_tokens FROM token_usage WHERE id = 1")
                 row = cursor.fetchone()
                 
-                # 🚨 [중요 피드백 반영] 옛날 테이블명 messages -> chat_history로 긴급 변경!!!
+                # chat_history 조회
                 try:
                     cursor.execute("SELECT role, content FROM chat_history ORDER BY id ASC")
                     db_messages = [{"role": r, "content": c} for r, c in cursor.fetchall()]
@@ -74,16 +73,14 @@ with st.expander("🛠️ 데이터 백업 및 복원", expanded=False):
                 
                 st.success("🎉 복원 성공! 연결 복구 완료.")
                 
-                # 🚨 [중복 원천 차단] 세션을 완전히 깨끗하게 밀어버린 뒤 업로드한 알맹이만 강제 점유!
+                # 🚨 [중복 차단 치트키] 
+                # 업로드 시점에는 세션 메모리를 직접 채우지 않고, 
+                # 깔끔하게 비워만 둔 뒤 새로고침합니다!
+                # 그러면 아래 2단계에서 새로 덮어씌워진 진짜 DB 파일을 "딱 한 번만" 정직하게 읽어옵니다.
                 st.session_state.clear()
                 
-                if row:
-                    st.session_state.total_input_tokens = row[0]
-                    st.session_state.total_output_tokens = row[1]
-                if db_messages:
-                    st.session_state.messages = list(db_messages)  # 👈 중복 방지를 위한 안전 복사
-                else:
-                    st.session_state.messages = []
+                # 세션에 빈 껍데기만 남겨 새로고침 신호 송신
+                st.session_state.messages_uploaded = True
                 
                 # 완전히 강제 주입된 깨끗한 상태로 새로고침!
                 st.rerun()
@@ -122,15 +119,21 @@ if "total_output_tokens" not in st.session_state:
 if "system_prompt" not in st.session_state or st.session_state.system_prompt == "":
     st.session_state.system_prompt = db_system_prompt
 
-# 🚨 [대화 2배 복사 버그 완전 격파] 
-# 세션에 대화 메시지 변수가 아예 등록되지 않은 경우("messages" not in st.session_state)에만 딱 한번 로드!
-if "messages" not in st.session_state:
+# 🚨 [2배 복사 완벽 진압 보호막]
+# 만약 메모리가 아예 비어있거나 업로드 직후라 초기화가 필요한 경우에만 
+# DB의 내용을 딱 한 벌 복사해 옵니다.
+if "messages" not in st.session_state or "messages_uploaded" in st.session_state:
     db_messages = db.load_messages()
     if db_messages:
+        # 중복 방지를 위해 기존 메시지를 지우고 무조건 새로 고침
         st.session_state.messages = list(db_messages)
     else:
         st.session_state.messages = []
         
+    # 복원용 임시 플래그 제거
+    if "messages_uploaded" in st.session_state:
+        del st.session_state.messages_uploaded
+
 # =======================================================
 # 🎨 [3단계] 저장된 대화 기록을 화면에 그리기
 # =======================================================
