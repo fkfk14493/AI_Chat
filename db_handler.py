@@ -1,8 +1,13 @@
 import sqlite3
 import json
+import os
 
-# 🎯 모든 데이터베이스 파일명을 'chat.db'로 단일화합니다!
+# 🎯 1. 모든 데이터베이스 파일명을 'chat.db'로 단일화! (변수 선언)
 DB_FILE = "chat.db"
+
+# 🚨 2. 프로젝트 기준 절대 경로를 생성합니다. (위에서 만든 DB_FILE 변수를 여기에 대입!)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, DB_FILE)  # 👈 이제 진짜 'chat.db'의 절대 경로가 됩니다!
 
 # ==========================================
 # 1. 🗄️ 데이터베이스 및 모든 테이블 통합 초기화
@@ -126,24 +131,18 @@ def get_system_prompt(default_prompt):
     return default_prompt
 
 
-# [DB 초기화 시 테이블 생성 영역에 추가]
+# ==========================================
+# 🛠️ [DB 초기화 및 테이블 생성]
+# ==========================================
 def init_db():
-    conn = sqlite3.connect("chat_history.db")
+    # 👈 기존 "chat_history.db" 대신 절대 경로인 DB_PATH로 확실하게 연결합니다!
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    # ... 기존 대화 저장 테이블 생성 코드 ...
     
-    # 📊 토큰 저장용 테이블 추가 (없으면 생성)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS token_usage (
-            id INTEGER PRIMARY KEY,
-            input_tokens INTEGER DEFAULT 0,
-            output_tokens INTEGER DEFAULT 0
-        )
-    """)
-    # 기본값 행 1개 삽입 (최초 1회만)
-    cursor.execute("INSERT OR IGNORE INTO token_usage (id, input_tokens, output_tokens) VALUES (1, 0, 0)")
-
-    # 🚨 2. [여기에 추가!] 토큰 테이블이 없으면 만들어줍니다.
+    # 💬 (기존 대화 저장 테이블이 여기에 구현되어 있다면 그대로 두시면 됩니다)
+    # 예: cursor.execute("CREATE TABLE IF NOT EXISTS messages ...")
+    
+    # 📊 토큰 저장용 테이블 생성 (없으면 자동 생성)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS token_usage (
             id INTEGER PRIMARY KEY,
@@ -152,21 +151,21 @@ def init_db():
         )
     """)
     
-    # 🚨 3. [여기에 추가!] 기본값 행 1개 삽입 (id가 1인 행이 이미 없으면 기본 0, 0으로 생성)
+    # 기본값 행 1개 삽입 (id가 1인 행이 없을 때만 삽입하여 기존 값 보존)
     cursor.execute("INSERT OR IGNORE INTO token_usage (id, input_tokens, output_tokens) VALUES (1, 0, 0)")
     
     conn.commit()
     conn.close()
 
+
 # ==========================================
 # 📊 [우주방어형] 토큰 사용량 업데이트 함수
 # ==========================================
 def update_tokens(input_tokens, output_tokens):
-    import sqlite3
-    conn = sqlite3.connect("chat_history.db")
+    conn = sqlite3.connect(DB_PATH)  # 👈 절대 경로 연결!
     cursor = conn.cursor()
     
-    # 1️⃣ 테이블이 없다면 무조건 만듭니다.
+    # 1️⃣ 테이블 방어 생성
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS token_usage (
             id INTEGER PRIMARY KEY,
@@ -175,10 +174,10 @@ def update_tokens(input_tokens, output_tokens):
         )
     """)
     
-    # 2️⃣ id=1이 없으면 기본값(0, 0) 주입
+    # 2️⃣ 기본 행 방어 생성
     cursor.execute("INSERT OR IGNORE INTO token_usage (id, input_tokens, output_tokens) VALUES (1, 0, 0)")
     
-    # 3️⃣ 이제 업데이트합니다.
+    # 3️⃣ 데이터 업데이트 적용
     cursor.execute("""
         UPDATE token_usage 
         SET input_tokens = ?, output_tokens = ? 
@@ -193,11 +192,10 @@ def update_tokens(input_tokens, output_tokens):
 # 📊 [우주방어형] 토큰 사용량 불러오기 함수
 # ==========================================
 def load_tokens():
-    import sqlite3
-    conn = sqlite3.connect("chat_history.db")
+    conn = sqlite3.connect(DB_PATH)  # 👈 절대 경로 연결!
     cursor = conn.cursor()
     
-    # 1️⃣ 불러올 때도 안전하게 테이블 생성 확인
+    # 1️⃣ 테이블 및 기본 행 방어 생성
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS token_usage (
             id INTEGER PRIMARY KEY,
@@ -208,11 +206,12 @@ def load_tokens():
     cursor.execute("INSERT OR IGNORE INTO token_usage (id, input_tokens, output_tokens) VALUES (1, 0, 0)")
     conn.commit()
     
-    # 2️⃣ 안전하게 토큰 가져오기
+    # 2️⃣ 데이터 조회
     cursor.execute("SELECT input_tokens, output_tokens FROM token_usage WHERE id = 1")
     row = cursor.fetchone()
     conn.close()
     
+    # 3️⃣ 정상적으로 반환 처리 (들여쓰기 및 리턴 로직 정상화)
     if row:
         return row[0], row[1]
-        return 0, 0
+    return 0, 0  # 👈 들여쓰기 밖으로 제대로 꺼내어, 데이터가 없을 때 안전하게 (0, 0)을 반환하게 고쳤습니다!

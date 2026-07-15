@@ -3,6 +3,11 @@ from google import genai
 from google.genai import types
 import os
 
+# 🎯 app.py에서도 똑같이 'chat.db'의 절대 경로를 바라보게 합니다!
+DB_FILE = "chat.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, DB_FILE)
+
 # =======================================================
 # 🚨 [1단계] 초비상 대피소 (이 영역이 켜져 있을 땐 DB를 절대 만지지 않음)
 # =======================================================
