@@ -2,223 +2,173 @@ import sqlite3
 import json
 import os
 
-# 🎯 1. 모든 데이터베이스 파일명을 'chat.db'로 단일화! (변수 선언)
+# 🎯 DB 절대 경로 설정
 DB_FILE = "chat.db"
-
-# 🚨 2. 프로젝트 기준 절대 경로를 생성합니다. (위에서 만든 DB_FILE 변수를 여기에 대입!)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, DB_FILE)  # 👈 이제 진짜 'chat.db'의 절대 경로가 됩니다!
+DB_PATH = os.path.join(BASE_DIR, DB_FILE)
 
 # ==========================================
-# 1. 🗄️ 데이터베이스 및 모든 테이블 통합 초기화
+# 🛠️ [수정] init_db 함수 안의 테이블명도 chat_history로 변경!
 # ==========================================
 def init_db():
-    """챗봇 운영에 필요한 모든 테이블을 'chat.db' 안에 원샷으로 생성합니다."""
-    conn = sqlite3.connect(DB_FILE)
+    """데이터베이스와 필요한 3대 테이블(config, token_usage, chat_history)을 강제 생성합니다."""
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # [A] 대화 기록 테이블 (JSON 문자열 통째로 저장)
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS chat_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            messages TEXT
-        )
-    ''')
-    
-    # [B] 줄거리 요약 저장 테이블 (슬라이딩 윈도우 및 /저장 용)
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS story_summary (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            summary TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # [C] 설정값 보관 전용 테이블 (시스템 프롬프트 영구 저장용)
-    cursor.execute('''
+    # 1️⃣ config 테이블
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS config (
             key TEXT PRIMARY KEY,
             value TEXT
         )
-    ''')
+    """)
+    
+    # 2️⃣ token_usage 테이블
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS token_usage (
+            id INTEGER PRIMARY KEY,
+            input_tokens INTEGER DEFAULT 0,
+            output_tokens INTEGER DEFAULT 0
+        )
+    """)
+    cursor.execute("INSERT OR IGNORE INTO token_usage (id, input_tokens, output_tokens) VALUES (1, 0, 0)")
+    
+    # 3️⃣ [🚨 이름 변경!] messages -> chat_history 테이블로 생성!
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chat_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     
     conn.commit()
     conn.close()
 
-
 # ==========================================
-# 2. 💬 대화 기록 (Messages) 제어 함수
+# ⚙️ 시스템 프롬프트 관련 함수 (config 테이블 제어)
 # ==========================================
-def save_chat(messages):
-    """현재까지의 대화 배열을 JSON으로 말아서 DB에 덮어씁니다."""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    cursor.execute("DELETE FROM chat_history")
-    json_messages = json.dumps(messages, ensure_ascii=False)
-    cursor.execute("INSERT INTO chat_history (messages) VALUES (?)", (json_messages,))
-    
-    conn.commit()
-    conn.close()
 
-def load_chat():
-    """DB에서 가장 최신의 대화 기록을 역직렬화하여 불러옵니다."""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT messages FROM chat_history ORDER BY id DESC LIMIT 1")
-    row = cursor.fetchone()
-    conn.close()
-    
-    if row:
-        return json.loads(row[0])
-    return []
+def get_system_prompt(default_prompt=""):
+    """DB에서 시스템 프롬프트를 안전하게 가져옵니다."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM config WHERE key = 'system_prompt'")
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return row[0]
+        else:
+            # 기존에 값이 없으면 기본값으로 저장하고 반환
+            save_system_prompt(default_prompt)
+            return default_prompt
+    except Exception:
+        return default_prompt
 
-
-# ==========================================
-# 3. 📝 줄거리 요약 (Summary) 제어 함수
-# ==========================================
-def save_summary(summary_text):
-    """요약된 줄거리를 DB에 한 줄씩 새로 누적하여 저장합니다."""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO story_summary (summary) VALUES (?)", (summary_text,))
-    conn.commit()
-    conn.close()
-
-def load_summary():
-    """가장 최신화된 하나의 줄거리 요약본을 불러옵니다."""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT summary FROM story_summary ORDER BY id DESC LIMIT 1")
-    row = cursor.fetchone()
-    conn.close()
-    return row[0] if row else "저장된 줄거리가 없습니다."
-
-
-# ==========================================
-# 4. ⚙️ 프롬프트 설정 (System Prompt) 제어 함수
-# ==========================================
 def save_system_prompt(prompt_text):
-    """수정된 시스템 프롬프트를 DB config 테이블에 영구 저장 및 업데이트합니다."""
-    conn = sqlite3.connect(DB_FILE)
+    """DB에 시스템 프롬프트를 덮어씌워 영구 저장합니다."""
+    init_db() # 테이블이 혹시나 없을 때를 대비해 강제 생성 실행
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO config (key, value) 
+        INSERT INTO config (key, value)
         VALUES ('system_prompt', ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
     """, (prompt_text,))
     conn.commit()
     conn.close()
 
-def get_system_prompt(default_prompt):
-    """DB에서 시스템 프롬프트를 가져오고, 없으면 기본값(default_prompt)으로 세팅합니다."""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    # 만약 config 테이블이 작동하지 않는 예외 상황 방어용 예외처리
+# ==========================================
+# 📊 토큰 사용량 관련 함수 (token_usage 테이블 제어)
+# ==========================================
+
+def load_tokens():
+    """누적 토큰을 가져옵니다."""
     try:
-        cursor.execute("SELECT value FROM config WHERE key = 'system_prompt'")
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT input_tokens, output_tokens FROM token_usage WHERE id = 1")
         row = cursor.fetchone()
+        conn.close()
         if row:
-            conn.close()
-            return row[0]
-    except sqlite3.OperationalError:
-        pass
-        
-    # 최초 실행 등의 이유로 DB에 프롬프트가 저장된 적이 없다면 기본값 저장 후 반환
-    conn.close()
-    save_system_prompt(default_prompt)
-    return default_prompt
+            return row[0], row[1]
+        return 0, 0
+    except Exception:
+        return 0, 0
 
-
-# ==========================================
-# 🛠️ [DB 초기화 및 테이블 생성]
-# ==========================================
-# db_handler.py
-
-def init_db():
+def update_tokens(input_delta, output_delta):
+    """누적 토큰 수치를 안전하게 갱신하고 누적치를 반환합니다."""
+    init_db()
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
-    # 🚨 [여기가 진짜 핵심!] config 테이블이 없으면 무조건 생성합니다!
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS config (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        )
-    """)
-    
-    # 📊 토큰 저장용 테이블 추가 (없으면 생성)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS token_usage (
-            id INTEGER PRIMARY KEY,
-            input_tokens INTEGER DEFAULT 0,
-            output_tokens INTEGER DEFAULT 0
-        )
-    """)
-    cursor.execute("INSERT OR IGNORE INTO token_usage (id, input_tokens, output_tokens) VALUES (1, 0, 0)")
-    
-    # 💬 (기존에 쓰시던 대화 저장용 테이블 생성 코드도 여기에 같이 있어야 합니다!)
-    # 예: cursor.execute("CREATE TABLE IF NOT EXISTS chat_history ...")
-    
-    conn.commit()
-    conn.close()
-
-
-# ==========================================
-# 📊 [우주방어형] 토큰 사용량 업데이트 함수
-# ==========================================
-def update_tokens(input_tokens, output_tokens):
-    conn = sqlite3.connect(DB_PATH)  # 👈 절대 경로 연결!
-    cursor = conn.cursor()
-    
-    # 1️⃣ 테이블 방어 생성
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS token_usage (
-            id INTEGER PRIMARY KEY,
-            input_tokens INTEGER DEFAULT 0,
-            output_tokens INTEGER DEFAULT 0
-        )
-    """)
-    
-    # 2️⃣ 기본 행 방어 생성
-    cursor.execute("INSERT OR IGNORE INTO token_usage (id, input_tokens, output_tokens) VALUES (1, 0, 0)")
-    
-    # 3️⃣ 데이터 업데이트 적용
     cursor.execute("""
         UPDATE token_usage 
-        SET input_tokens = ?, output_tokens = ? 
+        SET input_tokens = input_tokens + ?, 
+            output_tokens = output_tokens + ? 
         WHERE id = 1
-    """, (input_tokens, output_tokens))
-    
-    conn.commit()
-    conn.close()
-
-
-# ==========================================
-# 📊 [우주방어형] 토큰 사용량 불러오기 함수
-# ==========================================
-def load_tokens():
-    conn = sqlite3.connect(DB_PATH)  # 👈 절대 경로 연결!
-    cursor = conn.cursor()
-    
-    # 1️⃣ 테이블 및 기본 행 방어 생성
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS token_usage (
-            id INTEGER PRIMARY KEY,
-            input_tokens INTEGER DEFAULT 0,
-            output_tokens INTEGER DEFAULT 0
-        )
-    """)
-    cursor.execute("INSERT OR IGNORE INTO token_usage (id, input_tokens, output_tokens) VALUES (1, 0, 0)")
+    """, (input_delta, output_delta))
     conn.commit()
     
-    # 2️⃣ 데이터 조회
+    # 반영 후 최신 데이터 다시 로드
     cursor.execute("SELECT input_tokens, output_tokens FROM token_usage WHERE id = 1")
     row = cursor.fetchone()
     conn.close()
-    
-    # 3️⃣ 정상적으로 반환 처리 (들여쓰기 및 리턴 로직 정상화)
     if row:
         return row[0], row[1]
-    return 0, 0  # 👈 들여쓰기 밖으로 제대로 꺼내어, 데이터가 없을 때 안전하게 (0, 0)을 반환하게 고쳤습니다!
+    return 0, 0
+
+# ==========================================
+# 💬 [🚨 이름 변경!] 대화 기록 관련 함수 (chat_history 테이블 제어)
+# ==========================================
+
+def save_chat(messages_list):
+    """app.py의 형식(st.session_state.messages)을 받아와서 DB 테이블을 싹 비우고 완전히 새로 갱신합니다."""
+    init_db()
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # 🚨 테이블명을 chat_history로 맞춰서 비우고 저장합니다!
+    cursor.execute("DELETE FROM chat_history")
+    
+    for msg in messages_list:
+        cursor.execute("INSERT INTO chat_history (role, content) VALUES (?, ?)", (msg["role"], msg["content"]))
+        
+    conn.commit()
+    conn.close()
+
+
+def save_message(role, content):
+    """새로운 단일 대화 메시지를 DB에 저장합니다."""
+    init_db()
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO chat_history (role, content) VALUES (?, ?)", (role, content))
+    conn.commit()
+    conn.close()
+
+
+def load_messages():
+    """DB에 저장된 모든 대화 기록을 순서대로 리스트로 가져옵니다."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT role, content FROM chat_history ORDER BY id ASC") # 👈 chat_history 조회!
+        rows = cursor.fetchall()
+        conn.close()
+        return [{"role": r, "content": c} for r, c in rows]
+    except Exception:
+        return []
+
+
+def clear_messages():
+    """대화 기록을 싹 다 비웁니다."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM chat_history") # 👈 chat_history 삭제!
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
