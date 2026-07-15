@@ -73,13 +73,17 @@ with st.expander("🛠️ 데이터 백업 및 복원", expanded=False):
                 
                 st.success("🎉 복원 성공! 연결 복구 완료.")
                 
-                # 🚨 [중복 차단 치트키] 
-                # 업로드 시점에는 세션 메모리를 직접 채우지 않고, 
-                # 깔끔하게 비워만 둔 뒤 새로고침합니다!
-                # 그러면 아래 2단계에서 새로 덮어씌워진 진짜 DB 파일을 "딱 한 번만" 정직하게 읽어옵니다.
-                st.session_state.clear()
+                # 🚨 [중복 차단 치트키 개조!]
+                # 무지성 clear()로 신호등까지 다 날리는 대신, 대화와 토큰 세션만 쏙 비워줍니다.
+                st.session_state.messages = []
+                st.session_state.total_input_tokens = 0
+                st.session_state.total_output_tokens = 0
                 
-                # 세션에 빈 껍데기만 남겨 새로고침 신호 송신
+                if row:
+                    st.session_state.total_input_tokens = row[0]
+                    st.session_state.total_output_tokens = row[1]
+                
+                # 🚨 세션에 빈 껍데기만 남겨서 2단계에 새로고침 신호를 정확히 송신합니다!
                 st.session_state.messages_uploaded = True
                 
                 # 완전히 강제 주입된 깨끗한 상태로 새로고침!
