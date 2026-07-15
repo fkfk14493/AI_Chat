@@ -421,7 +421,7 @@ if user_input := st.chat_input("소고에게 메시지를 보내보세요..."):
                 if response.usage_metadata:
                     st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
                     st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
-                    db.update_tokens(st.session_state.total_input_tokens,
+                    db.update_tokens(st.session_state.total_input_tokens,)
         
         # ==========================================
         # 🔥 [새로 탑재된 치트키] 5턴 버퍼 슬라이딩 윈도우 자동 작동 영역
