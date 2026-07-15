@@ -2,7 +2,6 @@ import streamlit as st
 from google import genai
 from google.genai import types
 import db_handler as db
-import db
 
 
 # 데이터베이스 초기화 및 기존 대화 기록 불러오기
