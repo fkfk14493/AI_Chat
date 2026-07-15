@@ -3,21 +3,13 @@ from google import genai
 from google.genai import types
 import db_handler as db
 
-
-# 데이터베이스 초기화 및 기존 대화 기록 불러오기
+# 🚨 [여기 중요!] 1. DB와 테이블을 먼저 확실하게 생성/초기화합니다!
 db.init_db()
-if "messages" not in st.session_state:
-    st.session_state.messages = db.load_chat()
 
-# 세션 상태 초기화 영역 (기존에 messages 같은 거 초기화하는 곳 근처)
-if "total_input_tokens" not in st.session_state:
-    st.session_state.total_input_tokens = 0
-if "total_output_tokens" not in st.session_state:
-    st.session_state.total_output_tokens = 0
-
-# DB에서 토큰 사용량 불러오기
+# 📊 2. 그 다음, 안전하게 기존 토큰 사용량을 불러옵니다.
 db_input, db_output = db.load_tokens()
 
+# 3. 세션 상태(Session State)에 값 주입
 if "total_input_tokens" not in st.session_state:
     st.session_state.total_input_tokens = db_input
 if "total_output_tokens" not in st.session_state:
