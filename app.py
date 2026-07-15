@@ -121,8 +121,31 @@ if "total_output_tokens" not in st.session_state:
 if "system_prompt" not in st.session_state or st.session_state.system_prompt == "":
     st.session_state.system_prompt = db_system_prompt
 
+# 🚨 [수정] 대화 메시지 세션 주입 로직 개조!
 if "messages" not in st.session_state:
-    st.session_state.messages = []
+    # ❌ 기존: st.session_state.messages = []
+    # ✅ 변경: DB에서 불러온 진짜 대화 기록(db.load_messages)을 쑤셔 넣습니다!
+    
+    db_messages = db.load_messages()
+    if db_messages:
+        st.session_state.messages = db_messages
+    else:
+        st.session_state.messages = [] # DB에 아무것도 없으면 빈 리스트로 초기화
+
+# =======================================================
+# 🎨 [3단계] 저장된 대화 기록을 화면에 그리기
+# =======================================================
+
+# 🚨 이 반복문 코드가 있어야 이전 대화들이 화면에 챡챡 뜹니다!
+for message in st.session_state.messages:
+    # 사용자 메시지 그리기
+    if message["role"] == "user":
+        with st.chat_message("user"):
+            st.write(message["content"])
+    # AI 소고 메시지 그리기
+    elif message["role"] == "assistant":
+        with st.chat_message("assistant", avatar="sogo.jpg"):
+            st.write(message["content"])
 
 
 # [수정] 브라우저 기본 레이아웃에서 불필요한 여백을 줄이고 깔끔하게 세팅
