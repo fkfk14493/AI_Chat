@@ -138,33 +138,6 @@ if "messages" not in st.session_state or "messages_uploaded" in st.session_state
     if "messages_uploaded" in st.session_state:
         del st.session_state.messages_uploaded
 
-# =======================================================
-# 🎨 [3단계] 저장된 대화 기록을 화면에 그리기 (중복 출력 완벽 방어막)
-# =======================================================
-
-# 🚨 화면에 이미 그린 메시지를 체크해서 중복 출력을 완벽하게 차단합니다!
-rendered_keys = set()
-
-for message in st.session_state.messages:
-    # 역할(role)과 대화 내용(content)을 하나로 묶어 고유한 키(Key)로 만듭니다.
-    msg_key = (message["role"], message.get("content", ""))
-    
-    # 🚨 만약 이미 화면에 그린 적이 있는 메시지라면? 가차 없이 패스합니다!
-    if msg_key in rendered_keys:
-        continue
-    
-    # 처음 그리는 메시지라면 기록에 추가하고 화면에 출력합니다.
-    rendered_keys.add(msg_key)
-
-    # 사용자 메시지 그리기
-    if message["role"] == "user":
-        with st.chat_message("user"):
-            st.write(message["content"])
-            
-    # AI 소고 메시지 그리기
-    elif message["role"] == "assistant":
-        with st.chat_message("assistant", avatar="sogo.jpg"):
-            st.write(message["content"])
 
 
 # [수정] 브라우저 기본 레이아웃에서 불필요한 여백을 줄이고 깔끔하게 세팅
@@ -238,9 +211,19 @@ if "chat" not in st.session_state:
             # 503 이외의 다른 심각한 에러라면 사용자에게 에러를 그대로 보여줍니다.
             raise e
 
-# ── [기존 출력 영역 교체] ──
-# 웹 화면에 대화 기록만 순수하게 출력
+# ── [기존 출력 영역 교체] (중복 방어막 필터 + 수정 팝오버 완벽 통합본) ──
+# 웹 화면에 대화 기록만 순수하게 출력 (중복 출력 원천 차단)
+rendered_keys = set()
+
 for idx, msg in enumerate(st.session_state.messages):
+    # 역할(role)과 대화 내용(content)을 하나로 묶어 고유한 키(Key)로 만듭니다.
+    msg_key = (msg["role"], msg.get("content", ""))
+    
+    # 🚨 이미 화면에 그린 적이 있는 메시지라면 가차 없이 패스합니다! (2배 출력 원천 차단)
+    if msg_key in rendered_keys:
+        continue
+    rendered_keys.add(msg_key)
+    
     # role이 assistant일 때만 sogo.jpg 사진을 아이콘으로 지정
     avatar_image = "sogo.jpg" if msg["role"] == "assistant" else None
     
@@ -338,7 +321,6 @@ for idx, msg in enumerate(st.session_state.messages):
 # =======================================================
 # 🤖 [4단계] 사용자 입력창 및 통합 대화 처리 구역 (완전판)
 # =======================================================
-# 🚨 반드시 🎨 [3단계] 화면에 그리기 반복문보다 "아래쪽"에 위치해야 합니다!
 if user_input := st.chat_input("메시지를 입력하세요..."):
     
     # ── [특수 기능 1] 사용자가 '/저장' 이라고 입력했을 때 ──
