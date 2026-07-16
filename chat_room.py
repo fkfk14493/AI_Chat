@@ -275,35 +275,42 @@ def handle_user_input():
                             contents=summary_prompt
                         )
                     except Exception as e:
-                        # 💥 구글 API 전용 ClientError, ServerError, APIError 싹 다 그물망으로 잡아 가둡니다!
-                        st.toast("요약 중 3.5 모델 한도 혹은 필터링 감지! 3.1 Flash로 우회 요약을 시도합니다.")
+                        # 🚨 [이미 검증된 대화 우회 로직과 100% 동일하게 매핑!]
+                        is_quota_error = False
+                        if isinstance(e, errors.ClientError) or isinstance(e, errors.ServerError):
+                            if e.code in [429, 403, 503]:
+                                is_quota_error = True
                         
-                        try:
-                            # [요약 시도 2] 즉시 안전한 3.1 Flash-lite 우회로 가동!
-                            summary_response = st.session_state.client.models.generate_content(
-                                model="gemini-3.1-flash-lite",
-                                contents=summary_prompt
-                            )
-                        except Exception as inner_e:
-                            # 3.1 우회조차 검열이나 심각한 에러로 터질 경우를 대비한 가상 시놉시스 동적 방편!
-                            st.error(f"🚨 우회 요약 실패: {inner_e}")
-                            st.warning("⚠️ 임시 줄거리 요약을 적용하고 대화를 계속합니다.")
+                        # 에러 텍스트에 한도 키워드가 포함되어 있는지까지 칼같이 검사
+                        if is_quota_error or any(kw in str(e).upper() for kw in ["EXHAUSTED", "QUOTA", "LIMIT", "429"]):
+                            st.toast("요약용 3.5 모델 한도 도달! 3.1 Flash로 우회 요약합니다.")
                             
-                            # 1. 기존 요약본이 있다면 가져오고, 없으면 최근 메시지 3턴을 동적으로 합쳐서 시놉시스를 만듭니다.
-                            if existing_summary:
-                                fallback_text = f"{existing_summary} (최근 대화 진행 중 요약 지연 발생)"
-                            else:
-                                # 최근 3개의 대화 메시지를 슥 긁어서 동적으로 문장을 이어 붙입니다.
-                                recent_msgs = [f"{'나' if m['role'] == 'user' else '상대'}: {m['content']}" for m in keep_messages[:3]]
-                                fallback_text = " / ".join(recent_msgs)
-                            
-                            # 2. 가짜 클래스를 동적으로 조립하여 시스템 붕괴를 막아버립니다.
-                            class TempResponse:
-                                def __init__(self, text):
-                                    self.text = text
-                                    self.usage_metadata = None
-                                    
-                            summary_response = TempResponse(fallback_text)
+                            try:
+                                # [요약 시도 2] 즉시 3.1 Flash-lite 우회 가동!
+                                summary_response = st.session_state.client.models.generate_content(
+                                    model="gemini-3.1-flash-lite",
+                                    contents=summary_prompt
+                                )
+                            except Exception as inner_e:
+                                # 3.1마저 뻗을 때를 대비한 동적 가상 시놉시스 최종 방어선
+                                st.error(f"🚨 우회 요약 실패: {inner_e}")
+                                st.warning("⚠️ 임시 줄거리 요약을 적용하고 대화를 계속합니다.")
+                                
+                                if existing_summary:
+                                    fallback_text = f"{existing_summary} (최근 대화 진행 중 요약 지연 발생)"
+                                else:
+                                    recent_msgs = [f"{'나' if m['role'] == 'user' else '상대'}: {m['content']}" for m in keep_messages[:3]]
+                                    fallback_text = " / ".join(recent_msgs)
+                                
+                                class TempResponse:
+                                    def __init__(self, text):
+                                        self.text = text
+                                        self.usage_metadata = None
+                                        
+                                summary_response = TempResponse(fallback_text)
+                        else:
+                            # 쿼타 에러가 아닌 시스템 치명적 에러는 그대로 뿜어내기
+                            raise e
 
                     new_cumulative_summary = summary_response.text
                     
