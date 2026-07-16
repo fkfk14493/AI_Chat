@@ -210,3 +210,29 @@ def load_avatar():
         return None
     except Exception:
         return None
+    
+def save_summary(summary_text):
+    """누적 줄거리 요약을 config 테이블에 저장합니다."""
+    init_db()
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO config (key, value)
+            VALUES ('story_summary', ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
+            (summary_text,),
+        )
+
+
+def load_summary():
+    """저장된 누적 줄거리 요약을 불러옵니다."""
+    init_db()
+
+    with sqlite3.connect(DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT value FROM config WHERE key = 'story_summary'"
+        ).fetchone()
+
+    return row[0] if row else ""
