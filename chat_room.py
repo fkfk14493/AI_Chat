@@ -59,11 +59,6 @@ def render_chat_history():
                                 try:
                                     response = st.session_state.chat.send_message(edited_text)
                                     response_text = response.text
-                                    if response.usage_metadata:
-                                        st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
-                                        st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
-                                        db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
-                                        
                                 except Exception as e:
                                     # 🚨 구글 전용 429 / 403 / 503 에러 철벽 감지 및 우회
                                     is_quota_error = False
@@ -92,6 +87,18 @@ def render_chat_history():
                                         response = st.session_state.chat.send_message(edited_text)
                                         response_text = response.text
                                 
+                                    else:
+                                        raise e
+
+                                # 성공한 응답의 이번 요청 토큰만 누적
+                                if response.usage_metadata:
+                                    input_tokens = response.usage_metadata.prompt_token_count or 0
+                                    output_tokens = response.usage_metadata.candidates_token_count or 0
+
+                                    st.session_state.total_input_tokens += input_tokens
+                                    st.session_state.total_output_tokens += output_tokens
+                                    db.update_tokens(input_tokens, output_tokens)
+
                                 st.session_state.messages.append({"role": "assistant", "content": response_text})
                                 db.save_chat(st.session_state.messages)
                                 st.toast("마지막 대화가 수정 및 갱신되었습니다!")
@@ -171,11 +178,6 @@ def handle_user_input():
                         response = st.session_state.chat.send_message(user_input)
                         response_text = response.text
                         
-                        if response.usage_metadata:
-                            st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
-                            st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
-                            db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
-                        
                     except Exception as e:
                         # 🚨 구글 SDK 전용 에러 판별해서 한도(429/403) 초과 시 우회 작동!
                         is_quota_error = False
@@ -202,6 +204,15 @@ def handle_user_input():
                         else:
                             raise e
             
+                    # 성공한 응답의 이번 요청 토큰만 누적
+                    if response.usage_metadata:
+                        input_tokens = response.usage_metadata.prompt_token_count or 0
+                        output_tokens = response.usage_metadata.candidates_token_count or 0
+
+                        st.session_state.total_input_tokens += input_tokens
+                        st.session_state.total_output_tokens += output_tokens
+                        db.update_tokens(input_tokens, output_tokens)
+
             # 3. AI의 새 답변도 세션(메모리)에 최종 추가
             st.session_state.messages.append({"role": "assistant", "content": response_text})
             
@@ -260,6 +271,15 @@ def handle_user_input():
                     )
                     new_cumulative_summary = summary_response.text
                     
+                    # 자동 요약에 사용된 이번 요청 토큰도 누적
+                    if summary_response.usage_metadata:
+                        input_tokens = summary_response.usage_metadata.prompt_token_count or 0
+                        output_tokens = summary_response.usage_metadata.candidates_token_count or 0
+
+                        st.session_state.total_input_tokens += input_tokens
+                        st.session_state.total_output_tokens += output_tokens
+                        db.update_tokens(input_tokens, output_tokens)
+
                     db.save_summary(new_cumulative_summary)
                     
                     st.session_state.messages = list(keep_messages)
