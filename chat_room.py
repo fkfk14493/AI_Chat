@@ -275,42 +275,32 @@ def handle_user_input():
                             contents=summary_prompt
                         )
                     except Exception as e:
-                        # 🚨 [이미 검증된 대화 우회 로직과 100% 동일하게 매핑!]
-                        is_quota_error = False
-                        if isinstance(e, errors.ClientError) or isinstance(e, errors.ServerError):
-                            if e.code in [429, 403, 503]:
-                                is_quota_error = True
+                        # 💥 3.5에서 어떤 에러(ClientError, 한도, 필터링 등)가 터지든 즉시 우회막 작동!
+                        st.toast("⚠️ 요약용 3.5 모델 에러 감지! 3.1 Flash로 우회 요약을 시도합니다.")
                         
-                        # 에러 텍스트에 한도 키워드가 포함되어 있는지까지 칼같이 검사
-                        if is_quota_error or any(kw in str(e).upper() for kw in ["EXHAUSTED", "QUOTA", "LIMIT", "429"]):
-                            st.toast("요약용 3.5 모델 한도 도달! 3.1 Flash로 우회 요약합니다.")
+                        try:
+                            # [요약 시도 2] 즉시 3.1 Flash-lite로 우회 가동!
+                            summary_response = st.session_state.client.models.generate_content(
+                                model="gemini-3.1-flash-lite",
+                                contents=summary_prompt
+                            )
+                        except Exception as inner_e:
+                            # 3.1 우회마저 완전히 실패하는 최악의 극한 상황 시 방어선
+                            st.error(f"🚨 우회 요약 실패: {inner_e}")
+                            st.warning("⚠️ 임시 줄거리 요약을 적용하고 대화를 계속합니다.")
                             
-                            try:
-                                # [요약 시도 2] 즉시 3.1 Flash-lite 우회 가동!
-                                summary_response = st.session_state.client.models.generate_content(
-                                    model="gemini-3.1-flash-lite",
-                                    contents=summary_prompt
-                                )
-                            except Exception as inner_e:
-                                # 3.1마저 뻗을 때를 대비한 동적 가상 시놉시스 최종 방어선
-                                st.error(f"🚨 우회 요약 실패: {inner_e}")
-                                st.warning("⚠️ 임시 줄거리 요약을 적용하고 대화를 계속합니다.")
-                                
-                                if existing_summary:
-                                    fallback_text = f"{existing_summary} (최근 대화 진행 중 요약 지연 발생)"
-                                else:
-                                    recent_msgs = [f"{'나' if m['role'] == 'user' else '상대'}: {m['content']}" for m in keep_messages[:3]]
-                                    fallback_text = " / ".join(recent_msgs)
-                                
-                                class TempResponse:
-                                    def __init__(self, text):
-                                        self.text = text
-                                        self.usage_metadata = None
-                                        
-                                summary_response = TempResponse(fallback_text)
-                        else:
-                            # 쿼타 에러가 아닌 시스템 치명적 에러는 그대로 뿜어내기
-                            raise e
+                            if existing_summary:
+                                fallback_text = f"{existing_summary} (최근 대화 진행 중 요약 지연 발생)"
+                            else:
+                                recent_msgs = [f"{'나' if m['role'] == 'user' else '상대'}: {m['content']}" for m in keep_messages[:3]]
+                                fallback_text = " / ".join(recent_msgs)
+                            
+                            class TempResponse:
+                                def __init__(self, text):
+                                    self.text = text
+                                    self.usage_metadata = None
+                                    
+                            summary_response = TempResponse(fallback_text)
 
                     new_cumulative_summary = summary_response.text
                     
