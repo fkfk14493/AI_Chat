@@ -268,42 +268,43 @@ def handle_user_input():
                     
                     summary_response = None
                     
-                    # 1. 🚨 [요약 시도 1] 3.5 Flash로 우선 요약 시도 (Exception 만능 감지 가동!)
+                    # 1. 🚨 [요약 시도 1] 3.5 Flash로 우선 요약 시도 (스코프 억까 완벽 차단 버전!)
+                    # 💡 파이썬 엔진의 UnboundLocalError 억까를 막기 위해 임시 빈 객체로 선언해 둡니다.
+                    class DummyResponse:
+                        def __init__(self):
+                            self.text = ""
+                            self.usage_metadata = None
+                    
+                    summary_response = DummyResponse()
+                    
                     try:
+                        # 진짜 3.5 Flash 요약 시도
                         summary_response = st.session_state.client.models.generate_content(
                             model="gemini-3.5-flash",
                             contents=summary_prompt
                         )
                     except Exception as e:
-                        # 💥 구글 에러의 종류나 텍스트를 따지지 않고, 3.5에서 에러가 터지면 무조건 즉시 감지!
-                        st.toast("⚠️ 요약 중 에러 감지(필터링/한도 초과)! 3.1 Flash로 우회 요약을 강제 가동합니다.")
+                        # 💥 3.5에서 어떤 에러가 나든 묻지마 무조건 3.1로 대피!
+                        st.toast("⚠️ 요약용 3.5 모델 에러 감지! 3.1 Flash로 우회 요약을 강제 가동합니다.")
                         
                         try:
-                            # [요약 시도 2] 즉시 안전한 3.1 Flash-lite 우회 가동!
                             summary_response = st.session_state.client.models.generate_content(
                                 model="gemini-3.1-flash-lite",
                                 contents=summary_prompt
                             )
                         except Exception as inner_e:
-                            # 3.1 우회조차 검열이나 네트워크 대란으로 터질 경우를 대비한 가상 시놉시스 최종 방어선!
+                            # 3.1마저 실패했을 때 최후의 동적 임시 텍스트 이식
                             st.error(f"🚨 우회 요약 실패: {inner_e}")
                             st.warning("⚠️ 임시 줄거리 요약을 적용하고 대화를 계속합니다.")
                             
-                            # 기존 요약본이 있다면 가져오고, 없으면 최근 메시지 3턴을 동적으로 합쳐서 시놉시스를 만듭니다.
                             if existing_summary:
                                 fallback_text = f"{existing_summary} (최근 대화 진행 중 요약 지연 발생)"
                             else:
-                                # 최근 3개의 대화 메시지를 슥 긁어서 동적으로 문장을 이어 붙입니다.
                                 recent_msgs = [f"{'나' if m['role'] == 'user' else '상대'}: {m['content']}" for m in keep_messages[:3]]
                                 fallback_text = " / ".join(recent_msgs)
                             
-                            # 가짜 클래스를 동적으로 조립하여 시스템 붕괴를 완전히 막아버립니다.
-                            class TempResponse:
-                                def __init__(self, text):
-                                    self.text = text
-                                    self.usage_metadata = None
-                                    
-                            summary_response = TempResponse(fallback_text)
+                            summary_response = DummyResponse()
+                            summary_response.text = fallback_text
 
                     new_cumulative_summary = summary_response.text
                     
