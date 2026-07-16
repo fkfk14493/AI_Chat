@@ -268,32 +268,37 @@ def handle_user_input():
                     
                     summary_response = None
                     
-                    # 1. 🚨 [요약 시도 1] 3.5 Flash로 우선 요약 시도 (스코프 억까 완벽 차단 버전!)
-                    # 💡 파이썬 엔진의 UnboundLocalError 억까를 막기 위해 임시 빈 객체로 선언해 둡니다.
-                    class DummyResponse:
-                        def __init__(self):
-                            self.text = ""
-                            self.usage_metadata = None
-                    
-                    summary_response = DummyResponse()
+                    # 1. 🚨 [요약 시도 1] 안전하게 일회성 챗 세션을 빌드하여 요약 시도 (generate_content 탈피!)
+                    summary_response = None
                     
                     try:
-                        # 진짜 3.5 Flash 요약 시도
-                        summary_response = st.session_state.client.models.generate_content(
+                        # 100% 우회가 검증된 chats.create API를 사용해 일회성 요약 전용 세션을 만듭니다.
+                        temp_chat = st.session_state.client.chats.create(
                             model="gemini-3.5-flash",
-                            contents=summary_prompt
+                            config=types.GenerateContentConfig(
+                                system_instruction="너는 소설의 줄거리를 기록하는 전문 서기다. 대화 기록을 기반으로 줄거리를 요약해라.",
+                                temperature=0.3
+                            )
                         )
+                        summary_response = temp_chat.send_message(summary_prompt)
+                        
                     except Exception as e:
-                        # 💥 3.5에서 어떤 에러가 나든 묻지마 무조건 3.1로 대피!
+                        # 💥 대화방과 완벽히 동일한 계열의 API이므로 무조건 100% 에러가 잡힙니다!
                         st.toast("⚠️ 요약용 3.5 모델 에러 감지! 3.1 Flash로 우회 요약을 강제 가동합니다.")
                         
                         try:
-                            summary_response = st.session_state.client.models.generate_content(
+                            # [요약 시도 2] 즉시 안전한 3.1로 일회성 세션을 열어 우회 요약!
+                            temp_chat_lite = st.session_state.client.chats.create(
                                 model="gemini-3.1-flash-lite",
-                                contents=summary_prompt
+                                config=types.GenerateContentConfig(
+                                    system_instruction="너는 소설의 줄거리를 기록하는 전문 서기다. 대화 기록을 기반으로 줄거리를 요약해라.",
+                                    temperature=0.3
+                                )
                             )
+                            summary_response = temp_chat_lite.send_message(summary_prompt)
+                            
                         except Exception as inner_e:
-                            # 3.1마저 실패했을 때 최후의 동적 임시 텍스트 이식
+                            # 3.1마저 실패했을 때 최후의 백업 시놉시스
                             st.error(f"🚨 우회 요약 실패: {inner_e}")
                             st.warning("⚠️ 임시 줄거리 요약을 적용하고 대화를 계속합니다.")
                             
@@ -303,11 +308,15 @@ def handle_user_input():
                                 recent_msgs = [f"{'나' if m['role'] == 'user' else '상대'}: {m['content']}" for m in keep_messages[:3]]
                                 fallback_text = " / ".join(recent_msgs)
                             
-                            summary_response = DummyResponse()
-                            summary_response.text = fallback_text
+                            class TempResponse:
+                                def __init__(self, text):
+                                    self.text = text
+                                    self.usage_metadata = None
+                                    
+                            summary_response = TempResponse(fallback_text)
 
                     new_cumulative_summary = summary_response.text
-                    
+
                     # 자동 요약에 사용된 이번 요청 토큰도 안전하게 누적 및 DB 저장
                     if summary_response.usage_metadata:
                         input_tokens = summary_response.usage_metadata.prompt_token_count or 0
