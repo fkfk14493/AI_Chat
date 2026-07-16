@@ -172,3 +172,41 @@ def clear_messages():
         conn.close()
     except Exception:
         pass
+
+
+# 프로필 사진 업데이트 관련
+def save_avatar(image_bytes):
+    """업로드된 프로필 이미지 바이너리를 DB에 저장합니다 (기존 이미지 덮어쓰기)."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        # 이미지를 저장할 테이블이 없으면 생성
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value BLOB
+            )
+        """)
+        # 기존 설정이 있으면 덮어쓰고 없으면 삽입
+        cursor.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES ('avatar', ?)",
+            (image_bytes,)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"아바타 저장 실패: {e}")
+
+def load_avatar():
+    """DB에서 저장된 프로필 이미지 바이너리를 불러옵니다."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM settings WHERE key = 'avatar'")
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return row[0]  # 이미지 바이너리 데이터 반환
+        return None
+    except Exception:
+        return None

@@ -99,6 +99,10 @@ def render_backup_tools():
 
 def init_app_state():
     """🤖 [2단계] 메인 가동 영역 및 세션 초기화 (429 한도 초과 및 우회 보완판)"""
+
+    if "custom_avatar" not in st.session_state:
+        db_avatar = db.load_avatar()
+        st.session_state.custom_avatar = db_avatar if db_avatar else None
     
     # 1. 🚨 [최우선] 제미나이 API 클라이언트(client)를 가장 먼저 초기화합니다!
     if "client" not in st.session_state:
