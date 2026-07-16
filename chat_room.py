@@ -236,7 +236,7 @@ def handle_user_input():
             db.save_chat(st.session_state.messages)
 
             # ==========================================
-            # 🔥 10턴 버퍼 슬라이딩 윈도우 자동 작동 영역 (ClientError 철벽 방어 보완판!)
+            # 🔥 10턴 버퍼 슬라이딩 윈도우 자동 작동 영역 (완전 무결점 우회 이식 버전!)
             # ==========================================
             if len(st.session_state.messages) >= 40:
                 with st.spinner("예전 기억들을 요약하는 중..."):
@@ -268,11 +268,8 @@ def handle_user_input():
                     
                     summary_response = None
                     
-                    # 1. 🚨 [요약 시도 1] 안전하게 일회성 챗 세션을 빌드하여 요약 시도 (generate_content 탈피!)
-                    summary_response = None
-                    
+                    # 💡 [요약 시도 1] 안전하게 일회성 챗 세션을 빌드하여 요약 시도 (generate_content 완벽 탈피!)
                     try:
-                        # 100% 우회가 검증된 chats.create API를 사용해 일회성 요약 전용 세션을 만듭니다.
                         temp_chat = st.session_state.client.chats.create(
                             model="gemini-3.5-flash",
                             config=types.GenerateContentConfig(
@@ -281,7 +278,6 @@ def handle_user_input():
                             )
                         )
                         summary_response = temp_chat.send_message(summary_prompt)
-                        
                     except Exception as e:
                         # 💥 대화방과 완벽히 동일한 계열의 API이므로 무조건 100% 에러가 잡힙니다!
                         st.toast("⚠️ 요약용 3.5 모델 에러 감지! 3.1 Flash로 우회 요약을 강제 가동합니다.")
@@ -296,7 +292,6 @@ def handle_user_input():
                                 )
                             )
                             summary_response = temp_chat_lite.send_message(summary_prompt)
-                            
                         except Exception as inner_e:
                             # 3.1마저 실패했을 때 최후의 백업 시놉시스
                             st.error(f"🚨 우회 요약 실패: {inner_e}")
@@ -316,15 +311,18 @@ def handle_user_input():
                             summary_response = TempResponse(fallback_text)
 
                     new_cumulative_summary = summary_response.text
-
+                    
                     # 자동 요약에 사용된 이번 요청 토큰도 안전하게 누적 및 DB 저장
-                    if summary_response.usage_metadata:
-                        input_tokens = summary_response.usage_metadata.prompt_token_count or 0
-                        output_tokens = summary_response.usage_metadata.candidates_token_count or 0
+                    if summary_response and hasattr(summary_response, "usage_metadata") and summary_response.usage_metadata:
+                        try:
+                            input_tokens = summary_response.usage_metadata.prompt_token_count or 0
+                            output_tokens = summary_response.usage_metadata.candidates_token_count or 0
 
-                        st.session_state.total_input_tokens += input_tokens
-                        st.session_state.total_output_tokens += output_tokens
-                        db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
+                            st.session_state.total_input_tokens += input_tokens
+                            st.session_state.total_output_tokens += output_tokens
+                            db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
+                        except Exception:
+                            pass
 
                     db.save_summary(new_cumulative_summary)
                     
@@ -350,7 +348,7 @@ def handle_user_input():
                     위의 줄거리를 머릿속에 완벽히 인지하고, 과거 설정을 기억하면서 아래 이어지는 대화에 자연스럽게 반응해라.
                     """
                     
-                    # 2. 🚨 [세션 생성 시도 1] 3.5 Flash 챗 세션 빌드 시도
+                    # 🚨 [세션 생성 시도 1] 3.5 Flash 챗 세션 빌드 시도
                     try:
                         st.session_state.chat = st.session_state.client.chats.create(
                             model="gemini-3.5-flash",
@@ -361,7 +359,7 @@ def handle_user_input():
                             )
                         )
                     except Exception as e:
-                        st.toast("기억 복구 세션 3.5 모델 한도 감지! 즉시 3.1 Flash로 우회 연결합니다.")
+                        st.toast("⚠️ 기억 복구용 3.5 한도 초과! 즉시 3.1 Flash로 우회 연결합니다.")
                         try:
                             # [세션 생성 시도 2] 즉시 3.1 Flash-lite 우회로 재생성!
                             st.session_state.chat = st.session_state.client.chats.create(
