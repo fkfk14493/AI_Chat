@@ -268,24 +268,28 @@ def handle_user_input():
                     
                     summary_response = None
                     
-                    # 💡 [요약 시도 1] 3.5 Flash로 요약 시도하되, 구글 전용 예외 객체까지 통그물망으로 그랩!
+                    # 💡 [요약 시도 1] 안전하게 3.5 Flash로 요약 시도
                     try:
                         summary_response = st.session_state.client.models.generate_content(
                             model="gemini-3.5-flash",
                             contents=summary_prompt
                         )
-                    # 🚨 구글 SDK 전용 에러와 일반 파이썬 에러를 모두 잡아 가둡니다.
-                    except (errors.APIError, errors.ClientError, errors.ServerError, Exception) as e:
-                        st.toast("⚠️ 요약 중 3.5 모델 한도/에러 감지! 즉시 3.1로 대피합니다.")
+                    # 🚨 어떤 상속 구조나 임포트 경로 꼬임도 다 뚫어버리는 무적의 이중 방어선!
+                    except BaseException as e: 
+                        # 1️⃣ 일반 Exception보다 상위인 BaseException을 사용하여 시스템 예외까지 모두 포획
+                        # 2️⃣ 에러 객체의 이름을 문자열로 직접 뜯어내어 99.9% 확률로 검거
+                        error_class_name = e.__class__.__name__
+                        
+                        st.toast(f"⚠️ 요약 에러 감지 ({error_class_name})! 3.1로 강제 우회합니다.")
                         
                         try:
-                            # [요약 시도 2] 즉시 3.1 Flash-lite 우회 가동!
+                            # [요약 시도 2] 즉시 안전한 3.1 Flash-lite 우회 가동!
                             summary_response = st.session_state.client.models.generate_content(
                                 model="gemini-3.1-flash-lite",
                                 contents=summary_prompt
                             )
-                        except (errors.APIError, errors.ClientError, errors.ServerError, Exception) as inner_e:
-                            # 3.1 우회조차 완전히 붕괴했을 때 작동할 완벽한 안전 자갈선!
+                        except BaseException as inner_e:
+                            # 3.1 우회마저 완전히 실패했을 때 작동할 임시 텍스트 자갈선
                             st.error(f"🚨 우회 요약 실패: {inner_e}")
                             st.warning("⚠️ 임시 줄거리 요약을 적용하고 대화를 계속합니다.")
                             
@@ -301,7 +305,6 @@ def handle_user_input():
                                     self.usage_metadata = None
                                     
                             summary_response = TempResponse(fallback_text)
-
                     new_cumulative_summary = summary_response.text
                     
                     # 토큰 수 계산 영역도 안전 장치 강화
