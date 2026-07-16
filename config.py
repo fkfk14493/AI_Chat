@@ -124,10 +124,15 @@ def init_app_state():
     if "messages_uploaded" not in st.session_state:
         st.session_state.messages_uploaded = False
 
-    if "total_input_tokens" not in st.session_state:
-        st.session_state.total_input_tokens = 0
-    if "total_output_tokens" not in st.session_state:
-        st.session_state.total_output_tokens = 0
+    # DB에 저장된 누적 토큰을 새 세션에 복원
+    if (
+        "total_input_tokens" not in st.session_state
+        or "total_output_tokens" not in st.session_state
+        ):
+            saved_input_tokens, saved_output_tokens = db.load_tokens()
+
+            st.session_state.total_input_tokens = saved_input_tokens
+            st.session_state.total_output_tokens = saved_output_tokens
 
     # 5. 제미나이 대화 세션 생성 (이중 생성 방지 및 자동 백업 우회 적용)
     if "chat" not in st.session_state:

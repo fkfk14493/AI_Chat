@@ -254,9 +254,12 @@ def render_sidebar():
         estimated_cost = (total_in * 0.000000075) + (total_out * 0.00000030)
         st.caption(f"💰 현재 세션 예상 요금: 약 {estimated_cost * 1350:.2f}원")
 
-        if st.button("🧹 토큰 집계 초기화", use_container_width=True):
+        if st.button("토큰 집계 초기화", use_container_width=True):
+            db.reset_tokens()
+            
             st.session_state.total_input_tokens = 0
             st.session_state.total_output_tokens = 0
+            
             st.toast("누적 토큰 집계가 0으로 초기화되었습니다.")
             st.rerun()
 

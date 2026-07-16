@@ -236,3 +236,21 @@ def load_summary():
         ).fetchone()
 
     return row[0] if row else ""
+
+
+def reset_tokens():
+    """누적 토큰 수치를 0으로 초기화합니다."""
+    init_db()
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE token_usage
+        SET input_tokens = 0,
+            output_tokens = 0
+        WHERE id = 1
+    """)
+
+    conn.commit()
+    conn.close()
