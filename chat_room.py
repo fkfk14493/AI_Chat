@@ -217,10 +217,15 @@ def handle_user_input():
             # 3. AI의 새 답변도 세션(메모리)에 최종 추가
             st.session_state.messages.append({"role": "assistant", "content": response_text})
             
-            # 🚨 제미나이 뇌세포 실제 히스토리 멱살 잡고 동기화 강제 매핑
+            # 🚨 [제미나이 뇌세포 실제 히스토리 멱살 잡고 동기화 강제 매핑]
             if hasattr(st.session_state.chat, "history"):
                 new_history = []
-                for msg in st.session_state.messages:
+                
+                # 💡 [핵심 교정] 전체 메시지가 아니라, 제미나이한테는 무조건 '최근 20턴'만 슬라이싱해서 먹입니다!
+                # 이렇게 해야 제미나이 대가리가 가벼워지고 요약본 약발이 제대로 받습니다.
+                brain_messages = st.session_state.messages[-20:] if len(st.session_state.messages) > 20 else st.session_state.messages
+                
+                for msg in brain_messages:
                     if msg["role"] == "system":
                         continue
                     role_name = "model" if msg["role"] == "assistant" else "user"
@@ -321,8 +326,15 @@ def handle_user_input():
 
                     db.save_summary(new_cumulative_summary)
                     
+                    # 1️⃣ [안전 백업] 세션을 최근 20개로 자르기 "직전"에!
+                    # 현재 40턴 이상 쌓여있는 "전체 대화"를 먼저 DB에 통째로 보존합니다.
+                    db.save_chat(st.session_state.messages)
+                    
+                    # 2️⃣ [뇌세포 다이어트] 백업이 무사히 끝났으니,
+                    # 이제 안심하고 제미나이한테 전달할 세션(메모리)만 최근 20개로 잘라줍니다.
                     st.session_state.messages = list(keep_messages)
-                    db.save_chat(keep_messages)
+                    
+                    # 3️⃣ (🚨 기존에 있던 db.save_chat(keep_messages) 라인은 중복이자 파괴범이므로 가차없이 완전히 지워줍니다!)
                     
                     new_history = []
                     for msg in keep_messages:
