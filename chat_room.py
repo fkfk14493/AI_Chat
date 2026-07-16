@@ -3,6 +3,8 @@ import streamlit as st
 from google.genai import types
 from google.genai import errors  # 🚨 구글 SDK 전용 에러 처리를 위해 임포트!
 import db_handler as db  # 형씨의 원래 DB 핸들러 파일 호출
+import os
+import sqlite3
 
 def render_chat_history():
     """웹 화면에 대화 기록만 순수하게 출력 (중복 출력 원천 차단)"""
@@ -17,8 +19,13 @@ def render_chat_history():
             continue
         rendered_keys.add(msg_key)
         
-        # role이 assistant일 때만 사진을 아이콘으로 지정
-        avatar_image = "profile.jpg" if msg["role"] == "assistant" else None
+        avatar_image = None
+        if msg["role"] == "assistant":
+            if "custom_avatar" in st.session_state and st.session_state.custom_avatar is not None:
+                avatar_image = st.session_state.custom_avatar
+            else:
+                # 미리 준비된 이미지가 없을 때를 대비해 "🤖" 같은 텍스트나 기본 이미지를 백업으로 지정합니다.
+                avatar_image = "🤖"
         
         # 🎯 [순간이동 포인트 심기] HTML div를 사용해 각 메시지에 고유 ID(번호표)를 부여합니다.
         st.markdown(f'<div id="message-{idx}"></div>', unsafe_allow_html=True)
@@ -117,7 +124,10 @@ def handle_user_input():
         
         # ── [특수 기능 1] 사용자가 '/저장' 이라고 입력했을 때 ──
         if user_input.strip() == "/저장":
-            with st.chat_message("assistant", avatar="profile.jpg"):
+            # 📸 실시간 커스텀 프로필 동기화 (없으면 기본 "🤖" 아이콘 사용)
+            tgt_avatar = st.session_state.get("custom_avatar") if st.session_state.get("custom_avatar") is not None else "🤖"
+            
+            with st.chat_message("assistant", avatar=tgt_avatar):
                 with st.spinner("지금까지의 소설 줄거리를 요약하는 중..."):
                     summary_prompt = (
                         "지금까지 나눈 대화 기록을 바탕으로, "
@@ -165,8 +175,11 @@ def handle_user_input():
             with st.chat_message("user"):
                 st.write(user_input)
             
-            # 2. 🚨 [로딩 연출] 대답 대기 및 429 / 403 / 503 완벽 대응 우회막
-            with st.chat_message("assistant", avatar="profile.jpg"):
+            # 📸 실시간 커스텀 프로필 동기화 (없으면 기본 "🤖" 아이콘 사용)
+            tgt_avatar = st.session_state.get("custom_avatar") if st.session_state.get("custom_avatar") is not None else "🤖"
+            
+            # 2. 🚨 [로딩 연출] 대답 대기 및 429 / 403 / 503 완벽 대응 우회막 (커스텀 아바타 반영)
+            with st.chat_message("assistant", avatar=tgt_avatar):
                 with st.spinner("답장 하는 중..."):
                     try:
                         # [시도 1] 3.5 Flash로 대화 시도

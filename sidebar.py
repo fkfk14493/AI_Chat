@@ -15,6 +15,36 @@ def render_sidebar():
         st.title("⚙️ 설정 및 관리")
         st.markdown("---")
 
+        # ==========================================
+        # 📸 실시간 AI 프로필 이미지 업로더 추가!
+        # ==========================================
+        st.markdown("---")
+        st.subheader("📸 AI 프로필 설정")
+        
+        # 1. 현재 세션에 업로드된 이미지가 있는지 확인 (없으면 기본값 None)
+        if "custom_avatar" not in st.session_state:
+            st.session_state.custom_avatar = None
+            
+        uploaded_avatar = st.file_uploader(
+            "AI 프로필 사진 업로드 (.png, .jpg)", 
+            type=["png", "jpg", "jpeg"]
+        )
+        
+        if uploaded_avatar is not None:
+            # 업로드된 이미지의 바이너리 데이터를 세션에 직접 주입!
+            st.session_state.custom_avatar = uploaded_avatar.read()
+            st.success("프로필 이미지가 업로드되었습니다!")
+            st.rerun()  # 즉시 반영을 위해 새로고침
+            
+        # 현재 적용 중인 이미지가 커스텀 이미지라면 미리보기 띄워주기
+        if st.session_state.custom_avatar is not None:
+            st.image(st.session_state.custom_avatar, width=80, caption="현재 프로필")
+            if st.button("기본 프로필로 리셋", use_container_width=True):
+                st.session_state.custom_avatar = None
+                st.toast("기본 프로필로 되돌아갑니다.")
+                st.rerun()
+
+        st.markdown("---")
         st.subheader("🧭 화면 순간이동")
         
         # 가로로 정렬된 예쁜 버튼 2개 배치
