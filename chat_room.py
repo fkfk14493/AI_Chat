@@ -236,7 +236,7 @@ def handle_user_input():
             db.save_chat(st.session_state.messages)
 
             # ==========================================
-            # 🔥 10턴 버퍼 슬라이딩 윈도우 자동 작동 영역 (완전 무결점 우회 이식 버전!)
+            # 🔥 10턴 버퍼 슬라이딩 윈도우 자동 작동 영역 (구글 특수 에러 완전 포획 버전!)
             # ==========================================
             if len(st.session_state.messages) >= 40:
                 with st.spinner("예전 기억들을 요약하는 중..."):
@@ -268,32 +268,24 @@ def handle_user_input():
                     
                     summary_response = None
                     
-                    # 💡 [요약 시도 1] 안전하게 일회성 챗 세션을 빌드하여 요약 시도 (generate_content 완벽 탈피!)
+                    # 💡 [요약 시도 1] 3.5 Flash로 요약 시도하되, 구글 전용 예외 객체까지 통그물망으로 그랩!
                     try:
-                        temp_chat = st.session_state.client.chats.create(
+                        summary_response = st.session_state.client.models.generate_content(
                             model="gemini-3.5-flash",
-                            config=types.GenerateContentConfig(
-                                system_instruction="너는 소설의 줄거리를 기록하는 전문 서기다. 대화 기록을 기반으로 줄거리를 요약해라.",
-                                temperature=0.3
-                            )
+                            contents=summary_prompt
                         )
-                        summary_response = temp_chat.send_message(summary_prompt)
-                    except Exception as e:
-                        # 💥 대화방과 완벽히 동일한 계열의 API이므로 무조건 100% 에러가 잡힙니다!
-                        st.toast("⚠️ 요약용 3.5 모델 에러 감지! 3.1 Flash로 우회 요약을 강제 가동합니다.")
+                    # 🚨 구글 SDK 전용 에러와 일반 파이썬 에러를 모두 잡아 가둡니다.
+                    except (errors.APIError, errors.ClientError, errors.ServerError, Exception) as e:
+                        st.toast("⚠️ 요약 중 3.5 모델 한도/에러 감지! 즉시 3.1로 대피합니다.")
                         
                         try:
-                            # [요약 시도 2] 즉시 안전한 3.1로 일회성 세션을 열어 우회 요약!
-                            temp_chat_lite = st.session_state.client.chats.create(
+                            # [요약 시도 2] 즉시 3.1 Flash-lite 우회 가동!
+                            summary_response = st.session_state.client.models.generate_content(
                                 model="gemini-3.1-flash-lite",
-                                config=types.GenerateContentConfig(
-                                    system_instruction="너는 소설의 줄거리를 기록하는 전문 서기다. 대화 기록을 기반으로 줄거리를 요약해라.",
-                                    temperature=0.3
-                                )
+                                contents=summary_prompt
                             )
-                            summary_response = temp_chat_lite.send_message(summary_prompt)
-                        except Exception as inner_e:
-                            # 3.1마저 실패했을 때 최후의 백업 시놉시스
+                        except (errors.APIError, errors.ClientError, errors.ServerError, Exception) as inner_e:
+                            # 3.1 우회조차 완전히 붕괴했을 때 작동할 완벽한 안전 자갈선!
                             st.error(f"🚨 우회 요약 실패: {inner_e}")
                             st.warning("⚠️ 임시 줄거리 요약을 적용하고 대화를 계속합니다.")
                             
@@ -312,7 +304,7 @@ def handle_user_input():
 
                     new_cumulative_summary = summary_response.text
                     
-                    # 자동 요약에 사용된 이번 요청 토큰도 안전하게 누적 및 DB 저장
+                    # 토큰 수 계산 영역도 안전 장치 강화
                     if summary_response and hasattr(summary_response, "usage_metadata") and summary_response.usage_metadata:
                         try:
                             input_tokens = summary_response.usage_metadata.prompt_token_count or 0
@@ -348,7 +340,7 @@ def handle_user_input():
                     위의 줄거리를 머릿속에 완벽히 인지하고, 과거 설정을 기억하면서 아래 이어지는 대화에 자연스럽게 반응해라.
                     """
                     
-                    # 🚨 [세션 생성 시도 1] 3.5 Flash 챗 세션 빌드 시도
+                    # 3. 🚨 [세션 생성 시도] 여기서도 터질 수 있으니 구글 전용 예외 클래스로 동시 포획!
                     try:
                         st.session_state.chat = st.session_state.client.chats.create(
                             model="gemini-3.5-flash",
@@ -358,10 +350,9 @@ def handle_user_input():
                                 temperature=0.95
                             )
                         )
-                    except Exception as e:
+                    except (errors.APIError, errors.ClientError, errors.ServerError, Exception) as e:
                         st.toast("⚠️ 기억 복구용 3.5 한도 초과! 즉시 3.1 Flash로 우회 연결합니다.")
                         try:
-                            # [세션 생성 시도 2] 즉시 3.1 Flash-lite 우회로 재생성!
                             st.session_state.chat = st.session_state.client.chats.create(
                                 model="gemini-3.1-flash-lite",
                                 history=new_history,
@@ -370,7 +361,7 @@ def handle_user_input():
                                     temperature=0.95
                                 )
                             )
-                        except Exception as inner_e:
+                        except (errors.APIError, errors.ClientError, errors.ServerError, Exception) as inner_e:
                             st.error(f"🚨 우회 세션 연결 완전 붕괴: {inner_e}")
                             raise inner_e
                     
