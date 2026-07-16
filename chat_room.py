@@ -235,7 +235,7 @@ def handle_user_input():
             db.save_chat(st.session_state.messages)
 
             # ==========================================
-            # 🔥 10턴 버퍼 슬라이딩 윈도우 자동 작동 영역 (기억 보정 완료!)
+            # 🔥 10턴 버퍼 슬라이딩 윈도우 자동 작동 영역 (기억 보정 & 429 우회 완료!)
             # ==========================================
             if len(st.session_state.messages) >= 40:
                 with st.spinner("예전 기억들을 요약하는 중..."):
@@ -265,10 +265,29 @@ def handle_user_input():
                     {old_chat_text}
                     """
                     
-                    summary_response = st.session_state.client.models.generate_content(
-                        model="gemini-3.5-flash",
-                        contents=summary_prompt
-                    )
+                    # 1. 🚨 [요약 시도 1] 우선 똑똑한 3.5 Flash로 줄거리 요약본 생성 시도!
+                    try:
+                        summary_response = st.session_state.client.models.generate_content(
+                            model="gemini-3.5-flash",
+                            contents=summary_prompt
+                        )
+                    except Exception as e:
+                        # 요약 도중 429 / 403 / 503 에러 철벽 방어 및 즉각 대피
+                        is_quota_error = False
+                        if isinstance(e, errors.ClientError) or isinstance(e, errors.ServerError):
+                            if e.code in [429, 403, 503]:
+                                is_quota_error = True
+                        
+                        if is_quota_error or any(kw in str(e).upper() for kw in ["EXHAUSTED", "QUOTA", "LIMIT", "429"]):
+                            st.toast("요약용 3.5 모델 한도 도달! 3.1 Flash로 우회 요약합니다.")
+                            # [요약 시도 2] 즉시 안정성 높은 3.1 Flash-lite로 우회해서 요약문 생성!
+                            summary_response = st.session_state.client.models.generate_content(
+                                model="gemini-3.1-flash-lite",
+                                contents=summary_prompt
+                            )
+                        else:
+                            raise e
+
                     new_cumulative_summary = summary_response.text
                     
                     # 자동 요약에 사용된 이번 요청 토큰도 누적
@@ -304,14 +323,36 @@ def handle_user_input():
                     위의 줄거리를 머릿속에 완벽히 인지하고, 과거 설정을 기억하면서 아래 이어지는 대화에 자연스럽게 반응해라.
                     """
                     
-                    st.session_state.chat = st.session_state.client.chats.create(
-                        model="gemini-3.5-flash",
-                        history=new_history,
-                        config=types.GenerateContentConfig(
-                            system_instruction=updated_instruction,
-                            temperature=0.95
+                    # 2. 🚨 [세션 생성 시도 1] 요약본 주입한 3.5 Flash 챗 세션 재생성 시도!
+                    try:
+                        st.session_state.chat = st.session_state.client.chats.create(
+                            model="gemini-3.5-flash",
+                            history=new_history,
+                            config=types.GenerateContentConfig(
+                                system_instruction=updated_instruction,
+                                temperature=0.95
+                            )
                         )
-                    )
+                    except Exception as e:
+                        # 챗 세션 재생성 도중 429 / 403 / 503 감지
+                        is_quota_error = False
+                        if isinstance(e, errors.ClientError) or isinstance(e, errors.ServerError):
+                            if e.code in [429, 403, 503]:
+                                is_quota_error = True
+                        
+                        if is_quota_error or any(kw in str(e).upper() for kw in ["EXHAUSTED", "QUOTA", "LIMIT", "429"]):
+                            st.toast("기억 복구용 3.5 모델 한도 도달! 3.1 Flash로 우회 세션을 연결합니다.")
+                            # [세션 생성 시도 2] 즉시 3.1 Flash-lite로 우회해서 뇌세포 연결 완료!
+                            st.session_state.chat = st.session_state.client.chats.create(
+                                model="gemini-3.1-flash-lite",
+                                history=new_history,
+                                config=types.GenerateContentConfig(
+                                    system_instruction=updated_instruction,
+                                    temperature=0.95
+                                )
+                            )
+                        else:
+                            raise e
                     
                 st.toast("10턴 기억 최적화 완료!")
             
