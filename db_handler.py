@@ -124,16 +124,30 @@ def update_tokens(input_delta, output_delta):
 # ==========================================
 
 def save_chat(messages_list):
-    """app.py의 형식(st.session_state.messages)을 받아와서 DB 테이블을 싹 비우고 완전히 새로 갱신합니다."""
+    """
+    기존 대화를 싹 비우지 않고, 
+    중복되지 않은 새로운 대화만 안전하게 누적하여 저장합니다!
+    """
     init_db()
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # 🚨 테이블명을 chat_history로 맞춰서 비우고 저장합니다!
-    cursor.execute("DELETE FROM chat_history")
+    # 🚨 절대 DELETE FROM chat_history 를 실행하지 않습니다! (원천 차단)
     
     for msg in messages_list:
-        cursor.execute("INSERT INTO chat_history (role, content) VALUES (?, ?)", (msg["role"], msg["content"]))
+        # 이미 동일한 내용이 DB에 있는지 먼저 확인 (중복 저장 방지)
+        cursor.execute(
+            "SELECT id FROM chat_history WHERE role = ? AND content = ? LIMIT 1", 
+            (msg["role"], msg["content"])
+        )
+        exists = cursor.fetchone()
+        
+        # DB에 없는 새로운 대화일 때만 안전하게 아래로 누적(Insert)
+        if not exists:
+            cursor.execute(
+                "INSERT INTO chat_history (role, content) VALUES (?, ?)", 
+                (msg["role"], msg["content"])
+            )
         
     conn.commit()
     conn.close()
