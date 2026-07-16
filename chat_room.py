@@ -1,4 +1,3 @@
-#chat_room.py
 import streamlit as st
 from google.genai import types
 from google.genai import errors  # 🚨 구글 SDK 전용 에러 처리를 위해 임포트!
@@ -90,14 +89,15 @@ def render_chat_history():
                                     else:
                                         raise e
 
-                                # 성공한 응답의 이번 요청 토큰만 누적
+                                # 성공한 응답의 이번 요청 토큰을 누적하고 DB에 안전하게 업데이트!
                                 if response.usage_metadata:
                                     input_tokens = response.usage_metadata.prompt_token_count or 0
                                     output_tokens = response.usage_metadata.candidates_token_count or 0
 
                                     st.session_state.total_input_tokens += input_tokens
                                     st.session_state.total_output_tokens += output_tokens
-                                    db.update_tokens(input_tokens, output_tokens)
+                                    # 🛠️ [기존 코드 보완] 세션 데이터에 더한 값을 DB에 안전하게 반영시킵니다!
+                                    db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
 
                                 st.session_state.messages.append({"role": "assistant", "content": response_text})
                                 db.save_chat(st.session_state.messages)
@@ -204,14 +204,15 @@ def handle_user_input():
                         else:
                             raise e
             
-                    # 성공한 응답의 이번 요청 토큰만 누적
+                    # 성공한 응답의 이번 요청 토큰만 전역 세션에 누적하고 DB에 저장!
                     if response.usage_metadata:
                         input_tokens = response.usage_metadata.prompt_token_count or 0
                         output_tokens = response.usage_metadata.candidates_token_count or 0
 
                         st.session_state.total_input_tokens += input_tokens
                         st.session_state.total_output_tokens += output_tokens
-                        db.update_tokens(input_tokens, output_tokens)
+                        # 🛠️ 누적 합산된 세션 토큰 값을 그대로 DB로 밀어줍니다! (새로고침 초기화 방지)
+                        db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
 
             # 3. AI의 새 답변도 세션(메모리)에 최종 추가
             st.session_state.messages.append({"role": "assistant", "content": response_text})
@@ -235,7 +236,7 @@ def handle_user_input():
             db.save_chat(st.session_state.messages)
 
             # ==========================================
-            # 🔥 10턴 버퍼 슬라이딩 윈도우 자동 작동 영역 (기억 보정 & 429 우회 완료!)
+            # 🔥 10턴 버퍼 슬라이딩 윈도우 자동 작동 영역 (ClientError 철벽 방어 보완판!)
             # ==========================================
             if len(st.session_state.messages) >= 40:
                 with st.spinner("예전 기억들을 요약하는 중..."):
@@ -265,39 +266,55 @@ def handle_user_input():
                     {old_chat_text}
                     """
                     
-                    # 1. 🚨 [요약 시도 1] 우선 똑똑한 3.5 Flash로 줄거리 요약본 생성 시도!
+                    summary_response = None
+                    
+                    # 1. 🚨 [요약 시도 1] 3.5 Flash로 우선 요약 시도
                     try:
                         summary_response = st.session_state.client.models.generate_content(
                             model="gemini-3.5-flash",
                             contents=summary_prompt
                         )
                     except Exception as e:
-                        # 요약 도중 429 / 403 / 503 에러 철벽 방어 및 즉각 대피
-                        is_quota_error = False
-                        if isinstance(e, errors.ClientError) or isinstance(e, errors.ServerError):
-                            if e.code in [429, 403, 503]:
-                                is_quota_error = True
+                        # 💥 구글 API 전용 ClientError, ServerError, APIError 싹 다 그물망으로 잡아 가둡니다!
+                        st.toast("요약 중 3.5 모델 한도 혹은 필터링 감지! 3.1 Flash로 우회 요약을 시도합니다.")
                         
-                        if is_quota_error or any(kw in str(e).upper() for kw in ["EXHAUSTED", "QUOTA", "LIMIT", "429"]):
-                            st.toast("요약용 3.5 모델 한도 도달! 3.1 Flash로 우회 요약합니다.")
-                            # [요약 시도 2] 즉시 안정성 높은 3.1 Flash-lite로 우회해서 요약문 생성!
+                        try:
+                            # [요약 시도 2] 즉시 안전한 3.1 Flash-lite 우회로 가동!
                             summary_response = st.session_state.client.models.generate_content(
                                 model="gemini-3.1-flash-lite",
                                 contents=summary_prompt
                             )
-                        else:
-                            raise e
+                        except Exception as inner_e:
+                            # 3.1 우회조차 검열이나 심각한 에러로 터질 경우를 대비한 가상 시놉시스 동적 방편!
+                            st.error(f"🚨 우회 요약 실패: {inner_e}")
+                            st.warning("⚠️ 임시 줄거리 요약을 적용하고 대화를 계속합니다.")
+                            
+                            # 1. 기존 요약본이 있다면 가져오고, 없으면 최근 메시지 3턴을 동적으로 합쳐서 시놉시스를 만듭니다.
+                            if existing_summary:
+                                fallback_text = f"{existing_summary} (최근 대화 진행 중 요약 지연 발생)"
+                            else:
+                                # 최근 3개의 대화 메시지를 슥 긁어서 동적으로 문장을 이어 붙입니다.
+                                recent_msgs = [f"{'나' if m['role'] == 'user' else '상대'}: {m['content']}" for m in keep_messages[:3]]
+                                fallback_text = " / ".join(recent_msgs)
+                            
+                            # 2. 가짜 클래스를 동적으로 조립하여 시스템 붕괴를 막아버립니다.
+                            class TempResponse:
+                                def __init__(self, text):
+                                    self.text = text
+                                    self.usage_metadata = None
+                                    
+                            summary_response = TempResponse(fallback_text)
 
                     new_cumulative_summary = summary_response.text
                     
-                    # 자동 요약에 사용된 이번 요청 토큰도 누적
+                    # 자동 요약에 사용된 이번 요청 토큰도 안전하게 누적 및 DB 저장
                     if summary_response.usage_metadata:
                         input_tokens = summary_response.usage_metadata.prompt_token_count or 0
                         output_tokens = summary_response.usage_metadata.candidates_token_count or 0
 
                         st.session_state.total_input_tokens += input_tokens
                         st.session_state.total_output_tokens += output_tokens
-                        db.update_tokens(input_tokens, output_tokens)
+                        db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
 
                     db.save_summary(new_cumulative_summary)
                     
@@ -323,7 +340,7 @@ def handle_user_input():
                     위의 줄거리를 머릿속에 완벽히 인지하고, 과거 설정을 기억하면서 아래 이어지는 대화에 자연스럽게 반응해라.
                     """
                     
-                    # 2. 🚨 [세션 생성 시도 1] 요약본 주입한 3.5 Flash 챗 세션 재생성 시도!
+                    # 2. 🚨 [세션 생성 시도 1] 3.5 Flash 챗 세션 빌드 시도
                     try:
                         st.session_state.chat = st.session_state.client.chats.create(
                             model="gemini-3.5-flash",
@@ -334,15 +351,9 @@ def handle_user_input():
                             )
                         )
                     except Exception as e:
-                        # 챗 세션 재생성 도중 429 / 403 / 503 감지
-                        is_quota_error = False
-                        if isinstance(e, errors.ClientError) or isinstance(e, errors.ServerError):
-                            if e.code in [429, 403, 503]:
-                                is_quota_error = True
-                        
-                        if is_quota_error or any(kw in str(e).upper() for kw in ["EXHAUSTED", "QUOTA", "LIMIT", "429"]):
-                            st.toast("기억 복구용 3.5 모델 한도 도달! 3.1 Flash로 우회 세션을 연결합니다.")
-                            # [세션 생성 시도 2] 즉시 3.1 Flash-lite로 우회해서 뇌세포 연결 완료!
+                        st.toast("기억 복구 세션 3.5 모델 한도 감지! 즉시 3.1 Flash로 우회 연결합니다.")
+                        try:
+                            # [세션 생성 시도 2] 즉시 3.1 Flash-lite 우회로 재생성!
                             st.session_state.chat = st.session_state.client.chats.create(
                                 model="gemini-3.1-flash-lite",
                                 history=new_history,
@@ -351,8 +362,9 @@ def handle_user_input():
                                     temperature=0.95
                                 )
                             )
-                        else:
-                            raise e
+                        except Exception as inner_e:
+                            st.error(f"🚨 우회 세션 연결 완전 붕괴: {inner_e}")
+                            raise inner_e
                     
                 st.toast("10턴 기억 최적화 완료!")
             
