@@ -122,31 +122,9 @@ def render_chat_history():
 def handle_user_input():
     """[4단계] 사용자 입력창 및 통합 대화 처리 구역 (UI 즉시 반영 및 429 우회 통합)"""
     if user_input := st.chat_input("메시지를 입력하세요..."):
-        
-        # ── [특수 기능 1] 사용자가 '/저장' 이라고 입력했을 때 ──
-        if user_input.strip() == "/저장":
-            # 📸 실시간 커스텀 프로필 동기화 (없으면 기본 "🤖" 아이콘 사용)
-            if st.session_state.get("custom_avatar") is not None:
-                tgt_avatar = io.BytesIO(st.session_state["custom_avatar"])
-            else:
-                tgt_avatar = "🤖"
-            
-            with st.chat_message("assistant", avatar=tgt_avatar):
-                with st.spinner("지금까지의 소설 줄거리를 요약하는 중..."):
-                    summary_prompt = (
-                        "지금까지 나눈 대화 기록을 바탕으로, "
-                        "소설의 현재 상황과 줄거리를 5문장 이내의 깔끔한 시놉시스로 요약해줘."
-                    )
-                    summary_response = st.session_state.chat.send_message(summary_prompt)
-                    summary_text = summary_response.text
-                    
-                    db.save_summary(summary_text)  # DB에 요약본 저장
-                    
-                    st.success("지금까지의 줄거리가 저장되었습니다.")
-                    st.info(f"**현재 줄거리 요약:**\n{summary_text}")
                     
         # ── [특수 기능 2] 사용자가 '/되돌리기' 이라고 입력했을 때 ──
-        elif user_input.strip() == "/되돌리기":
+        if user_input.strip() == "/되돌리기":
             if len(st.session_state.messages) >= 1:
                 with st.spinner("대화방을 동기화하는 중... "):
                     last_msg_role = st.session_state.messages[-1]["role"]
@@ -221,10 +199,6 @@ def handle_user_input():
                             response = st.session_state.chat.send_message(user_input)
                             response_text = response.text
                             
-                            if response.usage_metadata:
-                                st.session_state.total_input_tokens += response.usage_metadata.prompt_token_count
-                                st.session_state.total_output_tokens += response.usage_metadata.candidates_token_count
-                                db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
                         else:
                             raise e
             
