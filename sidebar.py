@@ -161,7 +161,11 @@ def render_sidebar():
                         model="gemini-3.1-flash-lite",
                         history=new_history if new_history else None,
                         config=types.GenerateContentConfig(
-                            system_instruction=st.session_state.system_prompt,
+                            system_instruction=(
+                                BASE_ROLEPLAY_PROMPT
+                                + "\n"
+                                + st.session_state.system_prompt
+                            ),
                             temperature=0.95,
                         )
                     )

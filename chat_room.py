@@ -79,9 +79,13 @@ def render_chat_history():
                                             model="gemini-3.1-flash-lite", 
                                             history=chat_history, 
                                             config=types.GenerateContentConfig(
-                                                system_instruction=st.session_state.system_prompt,
+                                                system_instruction=(
+                                                    BASE_ROLEPLAY_PROMPT
+                                                    + "\n"
+                                                    + st.session_state.system_prompt
+                                                ),
                                                 temperature=0.95
-                                            )
+                                            ),
                                         )
                                         response = st.session_state.chat.send_message(edited_text)
                                         response_text = response.text
