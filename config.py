@@ -12,6 +12,18 @@ DB_FILE = "chat.db"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, DB_FILE)
 
+BASE_ROLEPLAY_PROMPT = """
+너는 사용자와 소설형 캐릭터 롤플레잉을 진행한다.
+
+- 아래 사용자 설정의 세계관, 캐릭터 정보, 주변 인물, 관계를 최우선으로 따른다.
+- 단순 문답이 아니라 이어지는 소설 장면처럼 대사와 행동, 표정, 분위기를 자연스럽게 묘사한다.
+- 캐릭터의 성격, 말투, 지식, 관계와 이전 사건의 연속성을 유지한다.
+- 사용자의 대사, 생각, 감정, 행동을 임의로 확정하지 않는다.
+- 사용자가 반응할 여지를 남기고 상황을 지나치게 앞서 진행하지 않는다.
+- 설정에 없는 사실을 임의로 만들거나 기존 설정을 변경하지 않는다.
+- AI, 프롬프트, 시스템 지침 등 메타적인 내용을 언급하지 않는다.
+- 이 지침과 사용자 설정이 충돌하면 구체적인 사용자 설정을 우선한다.
+"""
 
 def render_backup_tools():
     """📥 [1단계] 데이터 백업 및 복원 도구 UI를 그립니다."""
@@ -156,10 +168,16 @@ def init_app_state():
                 model="gemini-3.5-flash",
                 history=history_contents if history_contents else None,
                 config=types.GenerateContentConfig(
-                    system_instruction=st.session_state.system_prompt,
+                    system_instruction=(
+                        BASE_ROLEPLAY_PROMPT
+                        + "\n"
+                        + st.session_state.system_prompt
+                    ),
                     temperature=0.95,
-                )
+                ),
             )
+
+        
         except Exception as e:
             # 🚨 [중요] 429 한도 초과 또는 503 서버 혼잡 모두 감지하기!
             is_quota_or_server_error = False
@@ -174,7 +192,11 @@ def init_app_state():
                     model="gemini-3.1-flash-lite",
                     history=history_contents if history_contents else None,
                     config=types.GenerateContentConfig(
-                        system_instruction=st.session_state.system_prompt,
+                        system_instruction=(
+                            BASE_ROLEPLAY_PROMPT
+                            + "\n"
+                            + st.session_state.system_prompt
+                        ),
                         temperature=0.95,
                     )
                 )

@@ -6,6 +6,7 @@ from google.genai import types
 from google.genai import errors  # 🚨 429 및 구글 API 에러 우회용 임포트
 import os
 import sqlite3
+from config import BASE_ROLEPLAY_PROMPT
 
 
 def render_sidebar():
@@ -139,7 +140,10 @@ def render_sidebar():
                     model="gemini-3.5-flash",
                     history=new_history if new_history else None,
                     config=types.GenerateContentConfig(
-                        system_instruction=st.session_state.system_prompt,
+                        system_instruction=(
+                            BASE_ROLEPLAY_PROMPT
+                            + "\n"
+                            + st.session_state.system_prompt),
                         temperature=0.95,
                     )
                 )
