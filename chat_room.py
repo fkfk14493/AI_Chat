@@ -96,8 +96,8 @@ def render_chat_history():
 
                                     st.session_state.total_input_tokens += input_tokens
                                     st.session_state.total_output_tokens += output_tokens
-                                    # 🛠️ [기존 코드 보완] 세션 데이터에 더한 값을 DB에 안전하게 반영시킵니다!
-                                    db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
+                                    
+                                    db.update_tokens(input_tokens,output_tokens)
 
                                 st.session_state.messages.append({"role": "assistant", "content": response_text})
                                 db.save_chat(st.session_state.messages)
@@ -211,8 +211,8 @@ def handle_user_input():
 
                         st.session_state.total_input_tokens += input_tokens
                         st.session_state.total_output_tokens += output_tokens
-                        # 🛠️ 누적 합산된 세션 토큰 값을 그대로 DB로 밀어줍니다! (새로고침 초기화 방지)
-                        db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
+                                    
+                        db.update_tokens(input_tokens,output_tokens)
 
             # 3. AI의 새 답변도 세션(메모리)에 최종 추가
             st.session_state.messages.append({"role": "assistant", "content": response_text})
@@ -320,7 +320,8 @@ def handle_user_input():
 
                             st.session_state.total_input_tokens += input_tokens
                             st.session_state.total_output_tokens += output_tokens
-                            db.update_tokens(st.session_state.total_input_tokens, st.session_state.total_output_tokens)
+                                    
+                            db.update_tokens(input_tokens,output_tokens)
                         except Exception:
                             pass
 
@@ -329,10 +330,6 @@ def handle_user_input():
                     # 1️⃣ [안전 백업] 세션을 최근 20개로 자르기 "직전"에!
                     # 현재 40턴 이상 쌓여있는 "전체 대화"를 먼저 DB에 통째로 보존합니다.
                     db.save_chat(st.session_state.messages)
-                    
-                    # 2️⃣ [뇌세포 다이어트] 백업이 무사히 끝났으니,
-                    # 이제 안심하고 제미나이한테 전달할 세션(메모리)만 최근 20개로 잘라줍니다.
-                    st.session_state.messages = list(keep_messages)
                     
                     # 3️⃣ (🚨 기존에 있던 db.save_chat(keep_messages) 라인은 중복이자 파괴범이므로 가차없이 완전히 지워줍니다!)
                     

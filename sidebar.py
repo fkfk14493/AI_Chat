@@ -267,15 +267,16 @@ def render_sidebar():
         st.subheader("위험 구역")
         
         if st.button("대화 기록 초기화", type="primary", use_container_width=True):
+            db.clear_messages()
+            
             st.session_state.messages = []
+            
+            # 요약 기억도 같이 제거하는 것을 권장
+            db.save_summary("")
+            
+            # 기존 Gemini chat 객체 삭제
             if "chat" in st.session_state:
-                if hasattr(st.session_state.chat, "history"):
-                    st.session_state.chat.history = []
-                elif hasattr(st.session_state.chat, "_history"):
-                    st.session_state.chat._history = []
-            try:
-                db.save_chat([])
-            except Exception:
-                pass
-            st.success("대화 기록이 완벽하게 초기화되었습니다!")
+                del st.session_state["chat"]
+                
+            st.success("대화 기록이 초기화되었습니다.")
             st.rerun()
