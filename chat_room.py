@@ -146,6 +146,8 @@ def handle_user_input():
                             st.session_state.messages.pop()
                     
                     db.save_chat(st.session_state.messages)
+                    st.write("세션:", len(st.session_state.messages))
+                    st.write("DB:", len(db.load_messages()))
                     
                     if hasattr(st.session_state.chat, "history") and st.session_state.chat.history:
                         st.session_state.chat.history = st.session_state.chat.history[:-remove_count]
