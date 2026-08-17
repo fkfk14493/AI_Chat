@@ -136,6 +136,7 @@ def handle_user_input():
                     
         # ── [특수 기능 2] 사용자가 '/되돌리기' 이라고 입력했을 때 ──
         if user_input.strip() == "/되돌리기":
+            st.write("되돌리기 분기 들어옴")
             if len(st.session_state.messages) >= 1:
                 with st.spinner("대화방을 동기화하는 중... "):
                     last_msg_role = st.session_state.messages[-1]["role"]
