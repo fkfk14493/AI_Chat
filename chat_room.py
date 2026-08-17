@@ -159,7 +159,7 @@ def handle_user_input():
                     st.toast("삭제 되었습니다.")
                 else:
                     st.toast("직전 대화 1턴을 되돌렸습니다.")
-                st.rerun()
+                
             else:
                 st.warning("되돌릴 대화 기록이 없습니다.")
                 
