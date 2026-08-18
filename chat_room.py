@@ -136,33 +136,117 @@ def handle_user_input():
                     
         # ── [특수 기능 2] 사용자가 '/되돌리기' 이라고 입력했을 때 ──
         if user_input.strip() == "/되돌리기":
-            st.write("되돌리기 분기 들어옴")
             if len(st.session_state.messages) >= 1:
-                with st.spinner("대화방을 동기화하는 중... "):
+
+                with st.spinner("대화방을 동기화하는 중..."):
+                    # 마지막 메시지가 AI 답변이면
+                    # user + assistant = 2개 삭제
                     last_msg_role = st.session_state.messages[-1]["role"]
                     remove_count = 1 if last_msg_role == "user" else 2
 
+                    # 1. 세션에서 삭제
                     for _ in range(remove_count):
                         if st.session_state.messages:
                             st.session_state.messages.pop()
-                    
+
+                    # 2. DB에도 삭제된 상태 저장
                     db.save_chat(st.session_state.messages)
-                    st.write("세션:", len(st.session_state.messages))
-                    st.write("DB:", len(db.load_messages()))
-                    
-                    if hasattr(st.session_state.chat, "history") and st.session_state.chat.history:
-                        st.session_state.chat.history = st.session_state.chat.history[:-remove_count]
-                    
-                    if hasattr(st.session_state.chat, "_history") and st.session_state.chat._history:
-                        st.session_state.chat._history = st.session_state.chat._history[:-remove_count]
-                    
+
+                    # ==========================================
+                    # 3. 삭제 후 남아 있는 대화로 AI 기억 재구성
+                    # ==========================================
+
+                    # 기존 정책과 동일하게 최근 20개 메시지만 기억
+                    brain_messages = (
+                        st.session_state.messages[-20:]
+                        if len(st.session_state.messages) > 20
+                        else st.session_state.messages
+                    )
+
+                    new_history = []
+
+                    for msg in brain_messages:
+
+                        if msg["role"] == "system":
+                            continue
+
+                        role_name = (
+                            "model"
+                            if msg["role"] == "assistant"
+                            else "user"
+                        )
+
+                        new_history.append(
+                            types.Content(
+                                role=role_name,
+                                parts=[
+                                    types.Part.from_text(
+                                        text=msg["content"]
+                                    )
+                                ]
+                            )
+                        )
+
+                    # 기존 요약본이 있다면 같이 적용
+                    try:
+                        story_summary = db.load_summary()
+                    except Exception:
+                        story_summary = ""
+
+                    if story_summary:
+                        updated_instruction = f"""
+{st.session_state.system_prompt}
+
+[우리가 지금까지 진행한 소설의 줄거리 요약]:
+{story_summary}
+
+위의 줄거리를 인지하고,
+이어지는 최근 대화와 자연스럽게 연결해서 답변해라.
+"""
+                    else:
+                        updated_instruction = st.session_state.system_prompt
+
+                    # ==========================================
+                    # 4. Chat 객체를 완전히 새로 생성
+                    # ==========================================
+
+                    try:
+
+                        st.session_state.chat = (
+                            st.session_state.client.chats.create(
+                                model="gemini-3.5-flash",
+                                history=new_history,
+                                config=types.GenerateContentConfig(
+                                    system_instruction=updated_instruction,
+                                    temperature=0.95
+                                )
+                            )
+                        )
+
+                    except Exception:
+
+                        # 3.5 실패 시 3.1로 우회
+                        st.session_state.chat = (
+                            st.session_state.client.chats.create(
+                                model="gemini-3.1-flash-lite",
+                                history=new_history,
+                                config=types.GenerateContentConfig(
+                                    system_instruction=updated_instruction,
+                                    temperature=0.95
+                                )
+                            )
+                        )
+
                 if remove_count == 1:
-                    st.toast("삭제 되었습니다.")
+                    st.toast("삭제되었습니다.")
                 else:
                     st.toast("직전 대화 1턴을 되돌렸습니다.")
-                
+
+                st.rerun()
+
             else:
                 st.warning("되돌릴 대화 기록이 없습니다.")
+
                 
         # ── [일반 대화] 특수 명령어가 아닌 일반 티키타카일 때 ──
         else:
@@ -223,26 +307,6 @@ def handle_user_input():
 
             # 3. AI의 새 답변도 세션(메모리)에 최종 추가
             st.session_state.messages.append({"role": "assistant", "content": response_text})
-            
-            # 🚨 [제미나이 뇌세포 실제 히스토리 멱살 잡고 동기화 강제 매핑]
-            if hasattr(st.session_state.chat, "history"):
-                new_history = []
-                
-                # 💡 [핵심 교정] 전체 메시지가 아니라, 제미나이한테는 무조건 '최근 20턴'만 슬라이싱해서 먹입니다!
-                # 이렇게 해야 제미나이 대가리가 가벼워지고 요약본 약발이 제대로 받습니다.
-                brain_messages = st.session_state.messages[-20:] if len(st.session_state.messages) > 20 else st.session_state.messages
-                
-                for msg in brain_messages:
-                    if msg["role"] == "system":
-                        continue
-                    role_name = "model" if msg["role"] == "assistant" else "user"
-                    new_history.append(
-                        types.Content(
-                            role=role_name,
-                            parts=[types.Part.from_text(text=msg["content"])]
-                        )
-                    )
-                st.session_state.chat.history = new_history
             
             # 4. DB에 현재 대화 기록을 통째로 딱 한 번만 저장!
             db.save_chat(st.session_state.messages)
