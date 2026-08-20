@@ -51,7 +51,7 @@ def render_room_list():
                 st.rerun()
 
             except Exception as e:
-                st.error(f"❌ 새 채팅방 생성 실패: {e}")
+                st.error(f"새 채팅방 생성 실패: {e}")
 
 
         # =======================================================
@@ -255,7 +255,7 @@ def render_room_list():
 
                                 except Exception as e:
                                     st.error(
-                                        f"❌ 이름 수정 실패: {e}"
+                                        f"이름 수정 실패: {e}"
                                     )
 
                         else:
@@ -271,7 +271,7 @@ def render_room_list():
                     # 🗑️ 삭제
                     # ---------------------------------------
                     if st.button(
-                        "🗑️ 채팅방 삭제",
+                        "채팅방 삭제",
                         key=f"delete_{room_id}",
                         use_container_width=True,
                         type="primary"
