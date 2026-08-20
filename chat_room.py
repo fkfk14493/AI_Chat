@@ -214,53 +214,50 @@ def render_chat_history():
                                 st.toast("마지막 대화가 수정 및 갱신되었습니다!")
                                 st.rerun()
 
-                        # ==========================================
-                        # 🔴 AI 답변 수정하기
-                        # 수정된 내용 → Supabase 저장 → AI 기억 재생성
-                        # ==========================================
-                        elif (
-                            msg["role"] == "assistant"
-                            and idx == len(st.session_state.messages) - 1
+            # ==========================================
+            # 🔴 AI 답변 수정하기
+            # ==========================================
+            elif msg["role"] == "assistant" and idx == len(st.session_state.messages) - 1:
+
+                with st.popover("수정하기"):
+
+                    refined_text = st.text_area(
+                        "수정 내용:",
+                        value=msg["content"],
+                        key=f"refine_{idx}",
+                        height=150
+                    )
+
+                    if st.button(
+                        "확인",
+                        key=f"btn_refine_{idx}",
+                        use_container_width=True
+                    ):
+
+                        if (
+                            refined_text.strip()
+                            and refined_text.strip() != msg["content"]
                         ):
-                            with st.popover("수정하기"):
 
-                                refined_text = st.text_area(
-                                    "수정 내용:",
-                                    value=msg["content"],
-                                    key=f"refine_{idx}",
-                                    height=150
-                                )
+                            # 1. 세션 메시지 수정
+                            st.session_state.messages[idx]["content"] = (
+                                refined_text.strip()
+                            )
 
-                                if st.button(
-                                    "확인",
-                                    key=f"btn_refine_{idx}",
-                                    use_container_width=True
-                                ):
-                                    if (
-                                        refined_text.strip()
-                                        and refined_text.strip() != msg["content"]
-                                    ):
+                            # 2. 현재 방 Supabase에 수정 내용 저장
+                            db.save_room_messages(
+                                st.session_state.current_room_id,
+                                st.session_state.messages
+                            )
 
-                                        # 1. 화면/세션 내용 수정
-                                        st.session_state.messages[idx]["content"] = (
-                                            refined_text.strip()
-                                        )
+                            # 3. 수정된 대화 기준으로 AI 기억 재생성
+                            rebuild_chat_from_messages()
 
-                                        # 2. 현재 채팅방 Supabase에 저장
-                                        db.save_room_messages(
-                                            st.session_state.current_room_id,
-                                            st.session_state.messages
-                                        )
+                            st.toast(
+                                "수정 완료! AI 기억에도 반영되었습니다."
+                            )
 
-                                        # 3. 수정된 대화 기준으로
-                                        # Gemini Chat 객체 완전 재생성
-                                        rebuild_chat_from_messages()
-
-                                        st.toast(
-                                            "수정 완료! AI 기억에도 반영되었습니다."
-                                        )
-
-                                        st.rerun()
+                            st.rerun()
 
 def handle_user_input():
     """[4단계] 사용자 입력창 및 통합 대화 처리 구역 (UI 즉시 반영 및 429 우회 통합)"""
