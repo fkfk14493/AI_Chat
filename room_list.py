@@ -58,36 +58,36 @@ def render_room_list():
                 st.error(f"❌ 새 채팅방 생성 실패: {e}")
 
 
-    # =======================================================
-    # 📦 기존 SQLite 채팅 가져오기
-    # =======================================================
-    with st.expander("📦 기존 채팅 가져오기"):
+# =======================================================
+# 📦 기존 SQLite 채팅 가져오기
+# =======================================================
+with st.expander("📦 기존 채팅 가져오기"):
 
-        st.caption(
-            "예전에 SQLite에 저장돼 있던 대화를 "
-            "Supabase의 '기존 채팅' 방으로 복사합니다."
-        )
+    st.caption(
+        "예전에 SQLite에 저장돼 있던 대화를 "
+        "Supabase의 '기존 채팅' 방으로 복사합니다."
+    )
 
-        if st.button(
-            "기존 채팅 가져오기",
-            key="migrate_old_chat",
-            use_container_width=True
-        ):
-            try:
-                result = db.migrate_old_chat_to_supabase()
+    if st.button(
+        "기존 채팅 가져오기",
+        key="migrate_old_chat",
+        use_container_width=True
+    ):
+        try:
+            result = db.migrate_old_chat_to_supabase()
 
-                if result["success"]:
-                    st.success(
-                        f"✅ 이전 완료! "
-                        f"{result['saved_count']}개의 메시지를 옮겼습니다."
-                    )
-                    st.rerun()
+            if result["success"]:
+                st.success(
+                    f"✅ 이전 완료! "
+                    f"{result['saved_count']}개의 메시지를 옮겼습니다."
+                )
+                st.rerun()
 
-                else:
-                    st.warning(result["message"])
+            else:
+                st.warning(result["message"])
 
-            except Exception as e:
-                st.error(f"❌ 이전 실패: {e}")
+        except Exception as e:
+            st.error(f"❌ 이전 실패: {e}")
 
 
     st.divider()
@@ -101,7 +101,6 @@ def render_room_list():
 
     except Exception as e:
         st.error(f"❌ 채팅방 목록 불러오기 실패: {e}")
-        return
 
 
     # =======================================================
@@ -112,7 +111,6 @@ def render_room_list():
             "아직 만들어진 채팅방이 없습니다.\n\n"
             "오른쪽 위 ＋ 버튼을 눌러 새 채팅을 만들어보세요."
         )
-        return
 
 
     # =======================================================
