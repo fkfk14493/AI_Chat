@@ -43,6 +43,7 @@ def render_room_list():
                 st.session_state.current_room_id = room_id
                 st.session_state.messages = []
                 st.session_state.room_messages_loaded = True
+                st.session_state.auto_scroll_to_bottom = True
 
                 if "chat" in st.session_state:
                     del st.session_state.chat
