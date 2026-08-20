@@ -8,6 +8,21 @@ import io
 
 def render_chat_history():
     """웹 화면에 대화 기록만 순수하게 출력 (중복 출력 원천 차단)"""
+
+    if st.button(
+        "← 채팅방 목록",
+        key="back_to_room_list"
+    ):
+        st.session_state.current_room_id = None
+        st.session_state.room_messages_loaded = False
+
+        if "chat" in st.session_state:
+            del st.session_state.chat
+
+        st.rerun()
+
+    st.divider()
+
     rendered_keys = set()
 
     for idx, msg in enumerate(st.session_state.messages):
