@@ -270,3 +270,258 @@ def reset_tokens():
 
     conn.commit()
     conn.close()
+
+# =======================================================
+# 🌐 Supabase 멀티 채팅방 기능
+# =======================================================
+
+from datetime import datetime, timezone
+
+import streamlit as st
+from supabase import create_client
+
+
+# =======================================================
+# 🔌 Supabase 연결
+# =======================================================
+
+def get_supabase():
+    """
+    Streamlit Secrets에 저장된 Supabase 정보로 연결합니다.
+    """
+
+    try:
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+
+        return create_client(url, key)
+
+    except Exception as e:
+        raise Exception(f"Supabase 연결 실패: {e}")
+
+
+# =======================================================
+# 💬 채팅방 관련
+# =======================================================
+
+def create_room():
+    """
+    새 채팅방 생성
+
+    자동 제목:
+    채팅방 1
+    채팅방 2
+    채팅방 3
+    ...
+    """
+
+    supabase = get_supabase()
+
+    # 현재 존재하는 방 중 가장 큰 번호 확인
+    result = (
+        supabase
+        .table("chat_rooms")
+        .select("id")
+        .order("id", desc=True)
+        .limit(1)
+        .execute()
+    )
+
+    if result.data:
+        next_number = result.data[0]["id"] + 1
+    else:
+        next_number = 1
+
+    title = f"채팅방 {next_number}"
+
+    result = (
+        supabase
+        .table("chat_rooms")
+        .insert({
+            "title": title
+        })
+        .execute()
+    )
+
+    if not result.data:
+        raise Exception("채팅방 생성 실패")
+
+    return result.data[0]["id"]
+
+
+def get_rooms():
+    """
+    전체 채팅방 목록 불러오기
+
+    최근 사용한 채팅방이 위에 표시됩니다.
+    """
+
+    supabase = get_supabase()
+
+    result = (
+        supabase
+        .table("chat_rooms")
+        .select("*")
+        .order("updated_at", desc=True)
+        .execute()
+    )
+
+    return result.data or []
+
+
+def get_room(room_id):
+    """
+    특정 채팅방 정보 가져오기
+    """
+
+    supabase = get_supabase()
+
+    result = (
+        supabase
+        .table("chat_rooms")
+        .select("*")
+        .eq("id", room_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not result.data:
+        return None
+
+    return result.data[0]
+
+
+def rename_room(room_id, new_title):
+    """
+    채팅방 제목 수정
+    """
+
+    new_title = new_title.strip()
+
+    if not new_title:
+        return
+
+    supabase = get_supabase()
+
+    supabase.table("chat_rooms").update({
+        "title": new_title,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }).eq(
+        "id", room_id
+    ).execute()
+
+
+def delete_room(room_id):
+    """
+    채팅방 삭제
+
+    Supabase에서 chat_messages의 room_id 외래키에
+    ON DELETE CASCADE를 설정하면
+    해당 채팅방의 메시지도 같이 삭제됩니다.
+    """
+
+    supabase = get_supabase()
+
+    supabase.table("chat_rooms").delete().eq(
+        "id", room_id
+    ).execute()
+
+
+# =======================================================
+# 📨 채팅 메시지 관련
+# =======================================================
+
+def get_messages(room_id):
+    """
+    특정 채팅방의 메시지만 불러옵니다.
+
+    반환 예:
+    [
+        {"role": "user", "content": "안녕"},
+        {"role": "assistant", "content": "안녕하세요"}
+    ]
+    """
+
+    supabase = get_supabase()
+
+    result = (
+        supabase
+        .table("chat_messages")
+        .select("role, content")
+        .eq("room_id", room_id)
+        .order("id")
+        .execute()
+    )
+
+    return result.data or []
+
+
+def add_message(room_id, role, content):
+    """
+    특정 채팅방에 메시지 하나 저장
+    """
+
+    supabase = get_supabase()
+
+    # 메시지 저장
+    supabase.table("chat_messages").insert({
+        "room_id": room_id,
+        "role": role,
+        "content": content
+    }).execute()
+
+    # 해당 방을 최근 사용 목록 위로 올림
+    supabase.table("chat_rooms").update({
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }).eq(
+        "id", room_id
+    ).execute()
+
+
+def clear_room_messages(room_id):
+    """
+    특정 채팅방의 대화 내용만 삭제
+    채팅방 자체는 남겨둡니다.
+    """
+
+    supabase = get_supabase()
+
+    supabase.table("chat_messages").delete().eq(
+        "room_id", room_id
+    ).execute()
+
+
+def save_room_messages(room_id, messages):
+    """
+    해당 채팅방 메시지 전체를 다시 저장합니다.
+
+    기존 네 코드의 save_chat(messages)와 비슷하게
+    사용할 수 있도록 만든 호환용 함수입니다.
+    """
+
+    supabase = get_supabase()
+
+    # 해당 방 메시지만 삭제
+    supabase.table("chat_messages").delete().eq(
+        "room_id", room_id
+    ).execute()
+
+    # 다시 저장
+    rows = []
+
+    for message in messages:
+        rows.append({
+            "room_id": room_id,
+            "role": message["role"],
+            "content": message["content"]
+        })
+
+    if rows:
+        supabase.table("chat_messages").insert(rows).execute()
+
+    # 최근 수정 시간 갱신
+    supabase.table("chat_rooms").update({
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }).eq(
+        "id", room_id
+    ).execute()
