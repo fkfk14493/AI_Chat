@@ -308,32 +308,50 @@ def create_room():
     """
     새 채팅방 생성
 
-    자동 제목:
-    채팅방 1
-    채팅방 2
+    현재 사용되지 않는 가장 작은 번호를 찾아
+    채팅방 1, 채팅방 2 ... 형식으로 생성합니다.
+
+    예:
+    기존 채팅
     채팅방 3
-    ...
+
+    → 새로 만들면 '채팅방 1'
     """
 
     supabase = get_supabase()
 
-    # 현재 존재하는 방 중 가장 큰 번호 확인
+    # 현재 모든 채팅방 제목 가져오기
     result = (
         supabase
         .table("chat_rooms")
-        .select("id")
-        .order("id", desc=True)
-        .limit(1)
+        .select("title")
         .execute()
     )
 
-    if result.data:
-        next_number = result.data[0]["id"] + 1
-    else:
-        next_number = 1
+    rooms = result.data or []
+
+    # 현재 사용 중인 '채팅방 N' 번호 수집
+    used_numbers = set()
+
+    for room in rooms:
+        title = room.get("title", "")
+
+        if title.startswith("채팅방 "):
+            try:
+                number = int(title.replace("채팅방 ", "").strip())
+                used_numbers.add(number)
+            except ValueError:
+                pass
+
+    # 사용되지 않는 가장 작은 번호 찾기
+    next_number = 1
+
+    while next_number in used_numbers:
+        next_number += 1
 
     title = f"채팅방 {next_number}"
 
+    # 새 채팅방 생성
     result = (
         supabase
         .table("chat_rooms")
