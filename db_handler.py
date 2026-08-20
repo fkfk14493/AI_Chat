@@ -871,16 +871,14 @@ def migrate_old_settings_to_existing_room():
     - 프롬프트
     - 프로필 사진
     - 장기 요약
-    - 누적 토큰
+    - 누적 입력/출력 토큰
 
     을 전부 이전합니다.
     """
 
     supabase = get_supabase()
 
-    # =======================================================
     # 1. 기존 채팅방 찾기
-    # =======================================================
     result = (
         supabase
         .table("chat_rooms")
@@ -898,24 +896,17 @@ def migrate_old_settings_to_existing_room():
 
     room_id = result.data[0]["id"]
 
-
-    # =======================================================
     # 2. 기존 프롬프트
-    # =======================================================
     try:
         old_prompt = get_system_prompt("")
     except Exception:
         old_prompt = ""
 
-
-    # =======================================================
     # 3. 기존 프로필
-    # =======================================================
     try:
         old_avatar = load_avatar()
     except Exception:
         old_avatar = None
-
 
     avatar_data = None
 
@@ -927,29 +918,20 @@ def migrate_old_settings_to_existing_room():
         except Exception:
             avatar_data = None
 
-
-    # =======================================================
     # 4. 기존 장기 요약
-    # =======================================================
     try:
         old_summary = load_summary()
     except Exception:
         old_summary = ""
 
-
-    # =======================================================
     # 5. 기존 누적 토큰
-    # =======================================================
     try:
         old_input_tokens, old_output_tokens = load_tokens()
     except Exception:
         old_input_tokens = 0
         old_output_tokens = 0
 
-
-    # =======================================================
     # 6. 기존 채팅방에 전부 저장
-    # =======================================================
     supabase.table("chat_rooms").update({
         "system_prompt": old_prompt,
         "avatar_data": avatar_data,
@@ -958,9 +940,9 @@ def migrate_old_settings_to_existing_room():
         "output_tokens": old_output_tokens,
         "updated_at": datetime.now(timezone.utc).isoformat()
     }).eq(
-        "id", room_id
+        "id",
+        room_id
     ).execute()
-
 
     return {
         "success": True,
@@ -970,7 +952,7 @@ def migrate_old_settings_to_existing_room():
         "summary_migrated": bool(old_summary),
         "input_tokens": old_input_tokens,
         "output_tokens": old_output_tokens,
-        "message": "기존 설정/요약/토큰 이전 완료"
+        "message": "기존 채팅의 모든 설정/요약/토큰 이전 완료"
     }
 
 # =======================================================
