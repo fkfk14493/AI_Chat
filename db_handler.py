@@ -866,13 +866,20 @@ def migrate_old_settings_to_room(room_id):
 def migrate_old_settings_to_existing_room():
     """
     이미 만들어진 '기존 채팅' 방에
-    기존 SQLite 프롬프트 / 프로필 사진만 추가합니다.
+    기존 SQLite의
+
+    - 프롬프트
+    - 프로필 사진
+    - 장기 요약
+    - 누적 토큰
+
+    을 전부 이전합니다.
     """
 
     supabase = get_supabase()
 
     # =======================================================
-    # 기존 채팅방 찾기
+    # 1. 기존 채팅방 찾기
     # =======================================================
     result = (
         supabase
@@ -893,10 +900,8 @@ def migrate_old_settings_to_existing_room():
 
 
     # =======================================================
-    # 기존 프롬프트
+    # 2. 기존 프롬프트
     # =======================================================
-    old_prompt = ""
-
     try:
         old_prompt = get_system_prompt("")
     except Exception:
@@ -904,43 +909,56 @@ def migrate_old_settings_to_existing_room():
 
 
     # =======================================================
-    # 기존 프로필
+    # 3. 기존 프로필
     # =======================================================
-    old_avatar = None
-
     try:
         old_avatar = load_avatar()
     except Exception:
         old_avatar = None
 
 
-    # =======================================================
-    # 프로필 → base64
-    # =======================================================
     avatar_data = None
 
     if old_avatar:
-
         try:
-            import base64
-
             avatar_data = base64.b64encode(
                 old_avatar
             ).decode("utf-8")
-
         except Exception:
             avatar_data = None
 
 
     # =======================================================
-    # Supabase 업데이트
+    # 4. 기존 장기 요약
+    # =======================================================
+    try:
+        old_summary = load_summary()
+    except Exception:
+        old_summary = ""
+
+
+    # =======================================================
+    # 5. 기존 누적 토큰
+    # =======================================================
+    try:
+        old_input_tokens, old_output_tokens = load_tokens()
+    except Exception:
+        old_input_tokens = 0
+        old_output_tokens = 0
+
+
+    # =======================================================
+    # 6. 기존 채팅방에 전부 저장
     # =======================================================
     supabase.table("chat_rooms").update({
         "system_prompt": old_prompt,
-        "avatar_data": avatar_data
+        "avatar_data": avatar_data,
+        "summary": old_summary,
+        "input_tokens": old_input_tokens,
+        "output_tokens": old_output_tokens,
+        "updated_at": datetime.now(timezone.utc).isoformat()
     }).eq(
-        "id",
-        room_id
+        "id", room_id
     ).execute()
 
 
@@ -949,5 +967,103 @@ def migrate_old_settings_to_existing_room():
         "room_id": room_id,
         "prompt_migrated": bool(old_prompt),
         "avatar_migrated": bool(old_avatar),
-        "message": "기존 프롬프트와 프로필 이전 완료"
+        "summary_migrated": bool(old_summary),
+        "input_tokens": old_input_tokens,
+        "output_tokens": old_output_tokens,
+        "message": "기존 설정/요약/토큰 이전 완료"
     }
+
+# =======================================================
+# 🧠 방별 장기 요약
+# =======================================================
+
+def load_room_summary(room_id):
+    supabase = get_supabase()
+
+    result = (
+        supabase
+        .table("chat_rooms")
+        .select("summary")
+        .eq("id", room_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not result.data:
+        return ""
+
+    return result.data[0].get("summary") or ""
+
+
+def save_room_summary(room_id, summary_text):
+    supabase = get_supabase()
+
+    supabase.table("chat_rooms").update({
+        "summary": summary_text,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }).eq(
+        "id", room_id
+    ).execute()
+
+
+# =======================================================
+# 📊 방별 토큰
+# =======================================================
+
+def load_room_tokens(room_id):
+    supabase = get_supabase()
+
+    result = (
+        supabase
+        .table("chat_rooms")
+        .select("input_tokens, output_tokens")
+        .eq("id", room_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not result.data:
+        return 0, 0
+
+    room = result.data[0]
+
+    return (
+        room.get("input_tokens") or 0,
+        room.get("output_tokens") or 0
+    )
+
+
+def update_room_tokens(room_id, input_delta, output_delta):
+    """
+    현재 방의 기존 누적값을 읽고 증가시킵니다.
+    개인용 앱 기준으로 충분한 방식입니다.
+    """
+
+    current_input, current_output = load_room_tokens(room_id)
+
+    new_input = current_input + input_delta
+    new_output = current_output + output_delta
+
+    supabase = get_supabase()
+
+    supabase.table("chat_rooms").update({
+        "input_tokens": new_input,
+        "output_tokens": new_output,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }).eq(
+        "id", room_id
+    ).execute()
+
+    return new_input, new_output
+
+
+def reset_room_tokens(room_id):
+    supabase = get_supabase()
+
+    supabase.table("chat_rooms").update({
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }).eq(
+        "id", room_id
+    ).execute()

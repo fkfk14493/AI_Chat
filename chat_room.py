@@ -119,7 +119,11 @@ def render_chat_history():
                                     st.session_state.total_input_tokens += input_tokens
                                     st.session_state.total_output_tokens += output_tokens
                                     
-                                    db.update_tokens(input_tokens,output_tokens)
+                                    db.update_room_tokens(
+                                        st.session_state.current_room_id,
+                                        input_tokens,
+                                        output_tokens
+                                        )
 
                                 st.session_state.messages.append({"role": "assistant", "content": response_text})
                                 db.save_room_messages(
@@ -216,7 +220,9 @@ def handle_user_input():
 
                     # 기존 요약본이 있다면 같이 적용
                     try:
-                        story_summary = db.load_summary()
+                        db.load_room_summary(
+                            st.session_state.current_room_id
+                            )
                     except Exception:
                         story_summary = ""
 
@@ -330,7 +336,11 @@ def handle_user_input():
                         st.session_state.total_input_tokens += input_tokens
                         st.session_state.total_output_tokens += output_tokens
                                     
-                        db.update_tokens(input_tokens,output_tokens)
+                        db.update_room_tokens(
+                            st.session_state.current_room_id,
+                            input_tokens,
+                            output_tokens
+                            )
 
             # 3. AI의 새 답변도 세션(메모리)에 최종 추가
             st.session_state.messages.append({"role": "assistant", "content": response_text})
@@ -358,7 +368,7 @@ def handle_user_input():
                     
                     existing_summary = ""
                     try:
-                        existing_summary = db.load_summary() 
+                        existing_summary = db.load_room_summary(st.session_state.current_room_id)
                     except Exception:
                         existing_summary = ""
                     
@@ -444,7 +454,11 @@ def handle_user_input():
                             st.session_state.total_input_tokens += input_tokens
                             st.session_state.total_output_tokens += output_tokens
                                     
-                            db.update_tokens(input_tokens,output_tokens)
+                            db.update_room_tokens(
+                                st.session_state.current_room_id,
+                                input_tokens,
+                                output_tokens
+                                )
                         except Exception:
                             pass
 

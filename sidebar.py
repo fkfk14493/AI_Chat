@@ -27,6 +27,7 @@ def render_sidebar():
     if st.session_state.get("settings_room_id") != room_id:
 
         try:
+            # 현재 방 프롬프트 / 프로필 불러오기
             room_settings = db.get_room_settings(room_id)
 
             st.session_state.system_prompt = (
@@ -37,14 +38,30 @@ def render_sidebar():
                 room_settings["avatar"]
             )
 
+            # 현재 방 누적 토큰 불러오기
+            room_input_tokens, room_output_tokens = (
+                db.load_room_tokens(room_id)
+            )
+
+            st.session_state.total_input_tokens = (
+                room_input_tokens
+            )
+
+            st.session_state.total_output_tokens = (
+                room_output_tokens
+            )
+
         except Exception as e:
             st.error(
-                f"❌ 채팅방 설정 불러오기 실패: {e}"
+                f"채팅방 설정 불러오기 실패: {e}"
             )
 
             st.session_state.system_prompt = ""
             st.session_state.custom_avatar = None
+            st.session_state.total_input_tokens = 0
+            st.session_state.total_output_tokens = 0
 
+        # 현재 방 설정 로딩 완료 표시
         st.session_state.settings_room_id = room_id
 
 
@@ -532,7 +549,7 @@ def render_sidebar():
             use_container_width=True
         ):
 
-            db.reset_tokens()
+            db.reset_room_tokens(room_id)
 
             st.session_state.total_input_tokens = 0
             st.session_state.total_output_tokens = 0
