@@ -391,48 +391,58 @@ def handle_user_input():
     
     if user_input := st.chat_input("메시지를 입력하세요..."):
                     
-        # ── [특수 기능 2] 사용자가 '/되돌리기' 이라고 입력했을 때 ──
+        # ── [특수 기능 2] 사용자가 '/되돌리기'라고 입력했을 때 ──
         if user_input.strip() == "/되돌리기":
             if len(st.session_state.messages) >= 1:
 
                 with st.spinner("대화방을 동기화하는 중..."):
-                    # 마지막 메시지가 AI 답변이면
-                    # user + assistant = 2개 삭제
-                    last_msg_role = st.session_state.messages[-1]["role"]
-                    remove_count = 1 if last_msg_role == "user" else 2
 
-                    # 1. 세션에서 삭제
+                    # ==================================================
+                    # 1. 원본 세션은 바로 건드리지 않고 복사본에서 삭제
+                    #    → AI 기억 재구성 실패 시 대화 유실 방지
+                    # ==================================================
+                    new_messages = st.session_state.messages.copy()
+
+                    last_msg_role = new_messages[-1].get("role")
+
+                    # 마지막이 AI 답변이면 user + assistant 한 턴 삭제
+                    # 마지막이 user면 user 메시지 하나만 삭제
+                    remove_count = 2 if last_msg_role == "assistant" else 1
+
                     for _ in range(remove_count):
-                        if st.session_state.messages:
-                            st.session_state.messages.pop()
+                        if new_messages:
+                            new_messages.pop()
 
-                    # 2. DB에도 삭제된 상태 저장
-                    db.save_room_messages(
-                        st.session_state.current_room_id,
-                        st.session_state.messages
-                        )
-
-                    # ==========================================
-                    # 3. 삭제 후 남아 있는 대화로 AI 기억 재구성
-                    # ==========================================
-
-                    # 기존 정책과 동일하게 최근 20개 메시지만 기억
+                    # ==================================================
+                    # 2. 삭제 후 남은 대화로 Gemini history 재구성
+                    # ==================================================
                     brain_messages = (
-                        st.session_state.messages[-20:]
-                        if len(st.session_state.messages) > 20
-                        else st.session_state.messages
+                        new_messages[-20:]
+                        if len(new_messages) > 20
+                        else new_messages
                     )
 
                     new_history = []
 
                     for msg in brain_messages:
+                        msg_role = msg.get("role")
+                        msg_content = msg.get("content", "")
 
-                        if msg["role"] == "system":
+                        # system 메시지는 history에서 제외
+                        if msg_role == "system":
+                            continue
+
+                        # 예상하지 못한 role 방어
+                        if msg_role not in ("user", "assistant"):
+                            continue
+
+                        # 빈 메시지 방어
+                        if not msg_content:
                             continue
 
                         role_name = (
                             "model"
-                            if msg["role"] == "assistant"
+                            if msg_role == "assistant"
                             else "user"
                         )
 
@@ -441,19 +451,25 @@ def handle_user_input():
                                 role=role_name,
                                 parts=[
                                     types.Part.from_text(
-                                        text=msg["content"]
+                                        text=str(msg_content)
                                     )
                                 ]
                             )
                         )
 
-                    # 기존 요약본이 있다면 같이 적용
+                    # ==================================================
+                    # 3. 현재 방의 기존 요약본 불러오기
+                    # ==================================================
                     try:
                         story_summary = db.load_room_summary(
                             st.session_state.current_room_id
-                            ) or ""
-                    except Exception:
-                         story_summary = ""
+                        ) or ""
+                    except Exception as e:
+                        story_summary = ""
+                        print(f"[되돌리기] 요약 불러오기 실패: {e}")
+
+                    # 기본 프롬프트는 항상 먼저 지정
+                    updated_instruction = st.session_state.system_prompt
 
                     if story_summary:
                         updated_instruction = f"""
@@ -465,31 +481,29 @@ def handle_user_input():
 위의 줄거리를 인지하고,
 이어지는 최근 대화와 자연스럽게 연결해서 답변해라.
 """
-                    else:
-                        updated_instruction = st.session_state.system_prompt
 
-                    # ==========================================
-                    # 4. Chat 객체를 완전히 새로 생성
-                    # ==========================================
-
+                    # ==================================================
+                    # 4. 새 Chat 객체 생성
+                    #    성공하기 전에는 세션/DB를 변경하지 않음
+                    # ==================================================
                     try:
-
-                        st.session_state.chat = (
-                            st.session_state.client.chats.create(
-                                model="gemini-3.5-flash",
-                                history=new_history,
-                                config=types.GenerateContentConfig(
-                                    system_instruction=updated_instruction,
-                                    temperature=0.95
-                                )
+                        new_chat = st.session_state.client.chats.create(
+                            model="gemini-3.5-flash",
+                            history=new_history,
+                            config=types.GenerateContentConfig(
+                                system_instruction=updated_instruction,
+                                temperature=0.95
                             )
                         )
 
-                    except Exception:
+                    except Exception as first_error:
+                        print(
+                            "[되돌리기] gemini-3.5-flash 재생성 실패: "
+                            f"{first_error}"
+                        )
 
-                        # 3.5 실패 시 3.1로 우회
-                        st.session_state.chat = (
-                            st.session_state.client.chats.create(
+                        try:
+                            new_chat = st.session_state.client.chats.create(
                                 model="gemini-3.1-flash-lite",
                                 history=new_history,
                                 config=types.GenerateContentConfig(
@@ -497,7 +511,32 @@ def handle_user_input():
                                     temperature=0.95
                                 )
                             )
+
+                        except Exception as fallback_error:
+                            st.error(
+                                "대화 기억을 다시 만드는 데 실패했습니다.\n\n"
+                                f"3.5 오류: {first_error}\n\n"
+                                f"3.1 오류: {fallback_error}"
+                            )
+                            return
+
+                    # ==================================================
+                    # 5. Chat 재생성 성공 후 세션 + DB 반영
+                    # ==================================================
+                    st.session_state.messages = new_messages
+                    st.session_state.chat = new_chat
+
+                    try:
+                        db.save_room_messages(
+                            st.session_state.current_room_id,
+                            st.session_state.messages
                         )
+                    except Exception as e:
+                        st.error(
+                            "되돌리기 후 DB 저장 중 오류가 발생했습니다: "
+                            f"{e}"
+                        )
+                        return
 
                 if remove_count == 1:
                     st.toast("삭제되었습니다.")
@@ -509,7 +548,7 @@ def handle_user_input():
             else:
                 st.warning("되돌릴 대화 기록이 없습니다.")
 
-                
+
         # ── [일반 대화] 특수 명령어가 아닌 일반 티키타카일 때 ──
         else:
             # 1. 🚨 [UI 즉시 반영] 내 질문을 세션에 넣고 화면에 "즉시" 그려서 답답함 해소!
