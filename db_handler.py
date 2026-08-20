@@ -632,3 +632,87 @@ def migrate_old_chat_to_supabase():
         "saved_count": saved_count,
         "message": f"기존 채팅 {saved_count}개를 이전했습니다."
     }
+
+# =======================================================
+# 🎭 채팅방별 프롬프트 / 프로필
+# =======================================================
+
+import base64
+from datetime import datetime, timezone
+
+
+def get_room_settings(room_id):
+    """
+    현재 채팅방의 프롬프트와 프로필 사진을 불러옵니다.
+    """
+
+    supabase = get_supabase()
+
+    result = (
+        supabase
+        .table("chat_rooms")
+        .select("system_prompt, avatar_data")
+        .eq("id", room_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not result.data:
+        return {
+            "system_prompt": "",
+            "avatar": None
+        }
+
+    room = result.data[0]
+
+    avatar = None
+
+    if room.get("avatar_data"):
+        try:
+            avatar = base64.b64decode(
+                room["avatar_data"]
+            )
+        except Exception:
+            avatar = None
+
+    return {
+        "system_prompt": room.get("system_prompt") or "",
+        "avatar": avatar
+    }
+
+
+def save_room_prompt(room_id, prompt):
+    """
+    현재 채팅방에만 프롬프트 저장
+    """
+
+    supabase = get_supabase()
+
+    supabase.table("chat_rooms").update({
+        "system_prompt": prompt,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }).eq(
+        "id", room_id
+    ).execute()
+
+
+def save_room_avatar(room_id, avatar_bytes):
+    """
+    현재 채팅방에만 프로필 이미지 저장
+    """
+
+    supabase = get_supabase()
+
+    if avatar_bytes is None:
+        avatar_data = None
+    else:
+        avatar_data = base64.b64encode(
+            avatar_bytes
+        ).decode("utf-8")
+
+    supabase.table("chat_rooms").update({
+        "avatar_data": avatar_data,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }).eq(
+        "id", room_id
+    ).execute()
