@@ -127,10 +127,16 @@ def init_app_state():
         except Exception:
             st.session_state.system_prompt = ""
 
-    # 3. [메모리-DB 완벽 동기화] 세션에 메시지가 없거나 비어있다면, 새로고침 시 무조건 DB에서 안전하게 로드합니다!
-    if "messages" not in st.session_state or not st.session_state.messages:
-        db_messages = db.load_messages()
-        st.session_state.messages = db_messages if db_messages else []
+    # 현재 선택된 채팅방이 있을 경우 Supabase에서 해당 방 대화 로드
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    if st.session_state.get("current_room_id") is not None:
+        if not st.session_state.get("room_messages_loaded", False):
+            st.session_state.messages = db.get_messages(
+                st.session_state.current_room_id
+                )
+            st.session_state.room_messages_loaded = True
 
     # 4. 토큰 및 업로드 신호등 플래그 초기화
     if "messages_uploaded" not in st.session_state:

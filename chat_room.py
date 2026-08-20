@@ -53,7 +53,10 @@ def render_chat_history():
                                     st.session_state.chat._history = st.session_state.chat._history[:-2]
                                 
                                 st.session_state.messages.append({"role": "user", "content": edited_text})
-                                db.save_chat(st.session_state.messages)
+                                db.save_room_messages(
+                                    st.session_state.current_room_id,
+                                    st.session_state.messages
+                                    )
                                 
                                 try:
                                     response = st.session_state.chat.send_message(edited_text)
@@ -104,7 +107,10 @@ def render_chat_history():
                                     db.update_tokens(input_tokens,output_tokens)
 
                                 st.session_state.messages.append({"role": "assistant", "content": response_text})
-                                db.save_chat(st.session_state.messages)
+                                db.save_room_messages(
+                                    st.session_state.current_room_id,
+                                    st.session_state.messages
+                                    )
                                 st.toast("마지막 대화가 수정 및 갱신되었습니다!")
                                 st.rerun()
 
@@ -126,7 +132,10 @@ def render_chat_history():
                             if hasattr(st.session_state.chat, "_history") and st.session_state.chat._history:
                                 st.session_state.chat._history[-1].parts[0].text = refined_text
                             
-                            db.save_chat(st.session_state.messages)
+                            db.save_room_messages(
+                                st.session_state.current_room_id,
+                                st.session_state.messages
+                                )
                             st.toast("수정이 완료되었습니다.")
                             st.rerun()
 
@@ -150,7 +159,10 @@ def handle_user_input():
                             st.session_state.messages.pop()
 
                     # 2. DB에도 삭제된 상태 저장
-                    db.save_chat(st.session_state.messages)
+                    db.save_room_messages(
+                        st.session_state.current_room_id,
+                        st.session_state.messages
+                        )
 
                     # ==========================================
                     # 3. 삭제 후 남아 있는 대화로 AI 기억 재구성
@@ -309,7 +321,10 @@ def handle_user_input():
             st.session_state.messages.append({"role": "assistant", "content": response_text})
             
             # 4. DB에 현재 대화 기록을 통째로 딱 한 번만 저장!
-            db.save_chat(st.session_state.messages)
+            db.save_room_messages(
+                st.session_state.current_room_id,
+                st.session_state.messages
+                )
 
             # ==========================================
             # 🔥 10턴 버퍼 슬라이딩 윈도우 자동 작동 영역 (구글 특수 에러 완전 포획 버전!)
@@ -422,7 +437,10 @@ def handle_user_input():
                     
                     # 1️⃣ [안전 백업] 세션을 최근 20개로 자르기 "직전"에!
                     # 현재 40턴 이상 쌓여있는 "전체 대화"를 먼저 DB에 통째로 보존합니다.
-                    db.save_chat(st.session_state.messages)
+                    db.save_room_messages(
+                        st.session_state.current_room_id,
+                        st.session_state.messages
+                        )
                     
                     # 3️⃣ (🚨 기존에 있던 db.save_chat(keep_messages) 라인은 중복이자 파괴범이므로 가차없이 완전히 지워줍니다!)
                     

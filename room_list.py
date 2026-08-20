@@ -11,22 +11,17 @@ def render_room_list():
     # =======================================================
     st.markdown("""
     <style>
-
-        /* 채팅방 목록 전체 간격 */
         .block-container {
             padding-top: 2rem !important;
         }
 
-        /* 버튼 전체 기본 모양 */
         div[data-testid="stButton"] > button {
             transition: all 0.15s ease;
         }
 
-        /* 마우스 올렸을 때 살짝 반응 */
         div[data-testid="stButton"] > button:hover {
             transform: translateY(-1px);
         }
-
     </style>
     """, unsafe_allow_html=True)
 
@@ -34,14 +29,12 @@ def render_room_list():
     # =======================================================
     # 💬 제목 + 새 채팅 버튼
     # =======================================================
-
     title_col, add_col = st.columns([8, 1])
 
     with title_col:
-        st.subheader("💬")
+        st.subheader("💬 채팅방")
 
     with add_col:
-
         if st.button(
             "＋",
             key="new_chat",
@@ -53,6 +46,13 @@ def render_room_list():
 
                 st.session_state.current_room_id = room_id
                 st.session_state.messages = []
+
+                # 이 방의 메시지는 이미 빈 상태로 준비됨
+                st.session_state.room_messages_loaded = True
+
+                # 이전 방에서 쓰던 Gemini 대화 객체 제거
+                if "chat" in st.session_state:
+                    del st.session_state.chat
 
                 st.rerun()
 
@@ -66,7 +66,6 @@ def render_room_list():
     # =======================================================
     # 📂 기존 채팅방 목록 불러오기
     # =======================================================
-
     try:
         rooms = db.get_rooms()
 
@@ -78,30 +77,21 @@ def render_room_list():
     # =======================================================
     # 채팅방이 없을 때
     # =======================================================
-
     if not rooms:
-
         st.info(
             "아직 만들어진 채팅방이 없습니다.\n\n"
             "오른쪽 위 ＋ 버튼을 눌러 새 채팅을 만들어보세요."
         )
-
         return
 
 
     # =======================================================
     # 💬 채팅방 목록
     # =======================================================
-
     for room in rooms:
 
         room_id = room["id"]
         title = room.get("title") or "새 채팅"
-
-
-        # ---------------------------------------------------
-        # 채팅방 한 줄
-        # ---------------------------------------------------
 
         room_col, edit_col, delete_col = st.columns(
             [7, 1, 1]
@@ -111,7 +101,6 @@ def render_room_list():
         # ===================================================
         # 🚪 채팅방 입장
         # ===================================================
-
         with room_col:
 
             if st.button(
@@ -126,6 +115,13 @@ def render_room_list():
                     st.session_state.current_room_id = room_id
                     st.session_state.messages = messages
 
+                    # 이미 해당 방 메시지를 불러왔다는 표시
+                    st.session_state.room_messages_loaded = True
+
+                    # 이전 방에서 쓰던 Gemini 대화 객체 제거
+                    if "chat" in st.session_state:
+                        del st.session_state.chat
+
                     st.rerun()
 
                 except Exception as e:
@@ -137,7 +133,6 @@ def render_room_list():
         # ===================================================
         # ✏️ 이름 수정
         # ===================================================
-
         with edit_col:
 
             if st.button(
@@ -146,14 +141,12 @@ def render_room_list():
                 help="채팅방 이름 수정",
                 use_container_width=True
             ):
-
                 st.session_state.editing_room_id = room_id
 
 
         # ===================================================
         # 🗑️ 채팅방 삭제
         # ===================================================
-
         with delete_col:
 
             if st.button(
@@ -166,7 +159,6 @@ def render_room_list():
                 try:
                     db.delete_room(room_id)
 
-                    # 현재 편집 중인 방이었다면 초기화
                     if (
                         st.session_state.get(
                             "editing_room_id"
@@ -186,13 +178,10 @@ def render_room_list():
         # ===================================================
         # ✏️ 제목 편집창
         # ===================================================
-
         if (
             st.session_state.get("editing_room_id")
             == room_id
         ):
-
-            st.markdown("")
 
             new_title = st.text_input(
                 "채팅방 이름",
@@ -202,14 +191,10 @@ def render_room_list():
                 placeholder="채팅방 이름"
             )
 
-
             save_col, cancel_col = st.columns(2)
 
 
-            # -----------------------------------------------
             # 저장
-            # -----------------------------------------------
-
             with save_col:
 
                 if st.button(
@@ -221,35 +206,27 @@ def render_room_list():
                     new_title = new_title.strip()
 
                     if not new_title:
-
                         st.warning(
                             "채팅방 이름을 입력해주세요."
                         )
 
                     else:
-
                         try:
-
                             db.rename_room(
                                 room_id,
                                 new_title
                             )
 
                             st.session_state.editing_room_id = None
-
                             st.rerun()
 
                         except Exception as e:
-
                             st.error(
                                 f"❌ 이름 수정 실패: {e}"
                             )
 
 
-            # -----------------------------------------------
             # 취소
-            # -----------------------------------------------
-
             with cancel_col:
 
                 if st.button(
@@ -259,7 +236,6 @@ def render_room_list():
                 ):
 
                     st.session_state.editing_room_id = None
-
                     st.rerun()
 
 
