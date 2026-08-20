@@ -6,6 +6,87 @@ import os
 import sqlite3
 import io
 
+def rebuild_chat_from_messages():
+    """
+    현재 방의 수정된 메시지 기준으로
+    Gemini Chat 객체를 완전히 새로 생성합니다.
+    """
+
+    brain_messages = (
+        st.session_state.messages[-20:]
+        if len(st.session_state.messages) > 20
+        else st.session_state.messages
+    )
+
+    new_history = []
+
+    for msg in brain_messages:
+        if msg["role"] == "system":
+            continue
+
+        role_name = (
+            "model"
+            if msg["role"] == "assistant"
+            else "user"
+        )
+
+        new_history.append(
+            types.Content(
+                role=role_name,
+                parts=[
+                    types.Part.from_text(
+                        text=msg["content"]
+                    )
+                ]
+            )
+        )
+
+    # 현재 방 장기 요약 불러오기
+    try:
+        story_summary = db.load_room_summary(
+            st.session_state.current_room_id
+        )
+    except Exception:
+        story_summary = ""
+
+    # 프롬프트 + 요약 적용
+    if story_summary:
+        updated_instruction = f"""
+{st.session_state.system_prompt}
+
+[우리가 지금까지 진행한 소설의 줄거리 요약]:
+{story_summary}
+
+위 줄거리와 최근 대화를 기억하고 자연스럽게 이어서 답변해라.
+"""
+    else:
+        updated_instruction = st.session_state.system_prompt
+
+    # Gemini Chat 객체 완전 재생성
+    try:
+        st.session_state.chat = (
+            st.session_state.client.chats.create(
+                model="gemini-3.5-flash",
+                history=new_history,
+                config=types.GenerateContentConfig(
+                    system_instruction=updated_instruction,
+                    temperature=0.95
+                )
+            )
+        )
+
+    except Exception:
+        st.session_state.chat = (
+            st.session_state.client.chats.create(
+                model="gemini-3.1-flash-lite",
+                history=new_history,
+                config=types.GenerateContentConfig(
+                    system_instruction=updated_instruction,
+                    temperature=0.95
+                )
+            )
+        )
+
 def render_chat_history():
     """웹 화면에 대화 기록만 순수하게 출력 (중복 출력 원천 차단)"""
 
@@ -133,30 +214,53 @@ def render_chat_history():
                                 st.toast("마지막 대화가 수정 및 갱신되었습니다!")
                                 st.rerun()
 
-            # ==========================================
-            # 🔴 [신규 추가: 대답 다듬기 영역] 
-            # 마지막 대답 말풍선 아래에만 노출 (서버 요청 없이 텍스트만 다듬기)
-            # ==========================================
-            elif msg["role"] == "assistant" and idx == len(st.session_state.messages) - 1:
-                with st.popover("수정하기"):
-                    refined_text = st.text_area("수정 내용:", value=msg["content"], key=f"refine_{idx}", height=150)
-                    
-                    if st.button("확인", key=f"btn_refine_{idx}", use_container_width=True):
-                        if refined_text.strip() and refined_text.strip() != msg["content"]:
-                            st.session_state.messages[idx]["content"] = refined_text
-                            
-                            if hasattr(st.session_state.chat, "history") and st.session_state.chat.history:
-                                st.session_state.chat.history[-1].parts[0].text = refined_text
-                            
-                            if hasattr(st.session_state.chat, "_history") and st.session_state.chat._history:
-                                st.session_state.chat._history[-1].parts[0].text = refined_text
-                            
-                            db.save_room_messages(
-                                st.session_state.current_room_id,
-                                st.session_state.messages
+                        # ==========================================
+                        # 🔴 AI 답변 수정하기
+                        # 수정된 내용 → Supabase 저장 → AI 기억 재생성
+                        # ==========================================
+                        elif (
+                            msg["role"] == "assistant"
+                            and idx == len(st.session_state.messages) - 1
+                        ):
+                            with st.popover("수정하기"):
+
+                                refined_text = st.text_area(
+                                    "수정 내용:",
+                                    value=msg["content"],
+                                    key=f"refine_{idx}",
+                                    height=150
                                 )
-                            st.toast("수정이 완료되었습니다.")
-                            st.rerun()
+
+                                if st.button(
+                                    "확인",
+                                    key=f"btn_refine_{idx}",
+                                    use_container_width=True
+                                ):
+                                    if (
+                                        refined_text.strip()
+                                        and refined_text.strip() != msg["content"]
+                                    ):
+
+                                        # 1. 화면/세션 내용 수정
+                                        st.session_state.messages[idx]["content"] = (
+                                            refined_text.strip()
+                                        )
+
+                                        # 2. 현재 채팅방 Supabase에 저장
+                                        db.save_room_messages(
+                                            st.session_state.current_room_id,
+                                            st.session_state.messages
+                                        )
+
+                                        # 3. 수정된 대화 기준으로
+                                        # Gemini Chat 객체 완전 재생성
+                                        rebuild_chat_from_messages()
+
+                                        st.toast(
+                                            "수정 완료! AI 기억에도 반영되었습니다."
+                                        )
+
+                                        st.rerun()
 
 def handle_user_input():
     """[4단계] 사용자 입력창 및 통합 대화 처리 구역 (UI 즉시 반영 및 429 우회 통합)"""
