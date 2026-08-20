@@ -46,11 +46,9 @@ def render_room_list():
 
                 st.session_state.current_room_id = room_id
                 st.session_state.messages = []
-
-                # 이 방의 메시지는 이미 빈 상태로 준비됨
                 st.session_state.room_messages_loaded = True
 
-                # 이전 방에서 쓰던 Gemini 대화 객체 제거
+                # 이전 방에서 쓰던 Gemini 세션 제거
                 if "chat" in st.session_state:
                     del st.session_state.chat
 
@@ -58,6 +56,38 @@ def render_room_list():
 
             except Exception as e:
                 st.error(f"❌ 새 채팅방 생성 실패: {e}")
+
+
+    # =======================================================
+    # 📦 기존 SQLite 채팅 가져오기
+    # =======================================================
+    with st.expander("📦 기존 채팅 가져오기"):
+
+        st.caption(
+            "예전에 SQLite에 저장돼 있던 대화를 "
+            "Supabase의 '기존 채팅' 방으로 복사합니다."
+        )
+
+        if st.button(
+            "기존 채팅 가져오기",
+            key="migrate_old_chat",
+            use_container_width=True
+        ):
+            try:
+                result = db.migrate_old_chat_to_supabase()
+
+                if result["success"]:
+                    st.success(
+                        f"✅ 이전 완료! "
+                        f"{result['saved_count']}개의 메시지를 옮겼습니다."
+                    )
+                    st.rerun()
+
+                else:
+                    st.warning(result["message"])
+
+            except Exception as e:
+                st.error(f"❌ 이전 실패: {e}")
 
 
     st.divider()
@@ -86,7 +116,7 @@ def render_room_list():
 
 
     # =======================================================
-    # 💬 채팅방 목록
+    # 💬 채팅방 목록 출력
     # =======================================================
     for room in rooms:
 
@@ -114,11 +144,9 @@ def render_room_list():
 
                     st.session_state.current_room_id = room_id
                     st.session_state.messages = messages
-
-                    # 이미 해당 방 메시지를 불러왔다는 표시
                     st.session_state.room_messages_loaded = True
 
-                    # 이전 방에서 쓰던 Gemini 대화 객체 제거
+                    # 이전 방에서 쓰던 Gemini 세션 제거
                     if "chat" in st.session_state:
                         del st.session_state.chat
 
@@ -160,9 +188,7 @@ def render_room_list():
                     db.delete_room(room_id)
 
                     if (
-                        st.session_state.get(
-                            "editing_room_id"
-                        )
+                        st.session_state.get("editing_room_id")
                         == room_id
                     ):
                         st.session_state.editing_room_id = None
@@ -194,7 +220,9 @@ def render_room_list():
             save_col, cancel_col = st.columns(2)
 
 
+            # -----------------------------
             # 저장
+            # -----------------------------
             with save_col:
 
                 if st.button(
@@ -226,7 +254,9 @@ def render_room_list():
                             )
 
 
+            # -----------------------------
             # 취소
+            # -----------------------------
             with cancel_col:
 
                 if st.button(
