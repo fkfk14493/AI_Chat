@@ -814,75 +814,25 @@ def save_room_avatar(room_id, avatar_bytes):
 # 🚚 기존 SQLite 설정 → Supabase 채팅방 설정 이전
 # =======================================================
 
-def migrate_old_settings_to_room(room_id):
-    """
-    기존 SQLite에 저장되어 있던
-    시스템 프롬프트 / 프로필 이미지를
-    지정한 Supabase 채팅방으로 복사합니다.
-    """
-
-    # ---------------------------------------------------
-    # 기존 프롬프트
-    # ---------------------------------------------------
-    old_prompt = ""
-
-    try:
-        old_prompt = get_system_prompt("")
-    except Exception:
-        old_prompt = ""
-
-    if old_prompt:
-        save_room_prompt(
-            room_id,
-            old_prompt
-        )
-
-
-    # ---------------------------------------------------
-    # 기존 프로필 이미지
-    # ---------------------------------------------------
-    old_avatar = None
-
-    try:
-        # 기존 db_handler.py에 load_avatar()가 있다면 사용
-        if "load_avatar" in globals():
-            old_avatar = load_avatar()
-    except Exception:
-        old_avatar = None
-
-    if old_avatar:
-        save_room_avatar(
-            room_id,
-            old_avatar
-        )
-
-
-    return {
-        "success": True,
-        "prompt_migrated": bool(old_prompt),
-        "avatar_migrated": bool(old_avatar)
-    }
-
 def migrate_old_settings_to_existing_room():
     """
-    이미 만들어진 '기존 채팅' 방에
-    기존 SQLite의
+    기존 SQLite의 값이 실제로 존재할 때만
+    Supabase의 '기존 채팅' 방에 이전합니다.
 
-    - 프롬프트
-    - 프로필 사진
-    - 장기 요약
-    - 누적 입력/출력 토큰
-
-    을 전부 이전합니다.
+    빈 문자열 / None / 0으로 기존 Supabase 값을
+    덮어쓰지 않습니다.
     """
 
     supabase = get_supabase()
 
-    # 1. 기존 채팅방 찾기
+    # 기존 채팅방 찾기
     result = (
         supabase
         .table("chat_rooms")
-        .select("id")
+        .select(
+            "id, system_prompt, avatar_data, summary, "
+            "input_tokens, output_tokens"
+        )
         .eq("title", "기존 채팅")
         .limit(1)
         .execute()
@@ -894,52 +844,70 @@ def migrate_old_settings_to_existing_room():
             "message": "'기존 채팅' 방을 찾지 못했습니다."
         }
 
-    room_id = result.data[0]["id"]
+    room = result.data[0]
+    room_id = room["id"]
 
-    # 2. 기존 프롬프트
+    # -------------------------------------------------------
+    # 기존 SQLite 값 읽기
+    # -------------------------------------------------------
     try:
         old_prompt = get_system_prompt("")
     except Exception:
         old_prompt = ""
 
-    # 3. 기존 프로필
     try:
         old_avatar = load_avatar()
     except Exception:
         old_avatar = None
 
-    avatar_data = None
-
-    if old_avatar:
-        try:
-            avatar_data = base64.b64encode(
-                old_avatar
-            ).decode("utf-8")
-        except Exception:
-            avatar_data = None
-
-    # 4. 기존 장기 요약
     try:
         old_summary = load_summary()
     except Exception:
         old_summary = ""
 
-    # 5. 기존 누적 토큰
     try:
         old_input_tokens, old_output_tokens = load_tokens()
     except Exception:
         old_input_tokens = 0
         old_output_tokens = 0
 
-    # 6. 기존 채팅방에 전부 저장
-    supabase.table("chat_rooms").update({
-        "system_prompt": old_prompt,
-        "avatar_data": avatar_data,
-        "summary": old_summary,
-        "input_tokens": old_input_tokens,
-        "output_tokens": old_output_tokens,
-        "updated_at": datetime.now(timezone.utc).isoformat()
-    }).eq(
+    # -------------------------------------------------------
+    # 실제 값이 존재하는 것만 업데이트
+    # -------------------------------------------------------
+    update_data = {}
+
+    if old_prompt:
+        update_data["system_prompt"] = old_prompt
+
+    if old_avatar:
+        update_data["avatar_data"] = base64.b64encode(
+            old_avatar
+        ).decode("utf-8")
+
+    if old_summary:
+        update_data["summary"] = old_summary
+
+    # 둘 중 하나라도 실제 누적치가 있을 때만 이전
+    if old_input_tokens > 0 or old_output_tokens > 0:
+        update_data["input_tokens"] = old_input_tokens
+        update_data["output_tokens"] = old_output_tokens
+
+    if not update_data:
+        return {
+            "success": False,
+            "message": (
+                "현재 SQLite에서 이전할 기존 설정을 찾지 못했습니다. "
+                "Supabase 값은 건드리지 않았습니다."
+            )
+        }
+
+    update_data["updated_at"] = (
+        datetime.now(timezone.utc).isoformat()
+    )
+
+    supabase.table("chat_rooms").update(
+        update_data
+    ).eq(
         "id",
         room_id
     ).execute()
@@ -947,12 +915,7 @@ def migrate_old_settings_to_existing_room():
     return {
         "success": True,
         "room_id": room_id,
-        "prompt_migrated": bool(old_prompt),
-        "avatar_migrated": bool(old_avatar),
-        "summary_migrated": bool(old_summary),
-        "input_tokens": old_input_tokens,
-        "output_tokens": old_output_tokens,
-        "message": "기존 채팅의 모든 설정/요약/토큰 이전 완료"
+        "message": "존재하는 기존 데이터만 안전하게 이전했습니다."
     }
 
 # =======================================================
