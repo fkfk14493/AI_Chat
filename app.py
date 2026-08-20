@@ -4,6 +4,7 @@ import db_handler as db
 from config import init_app_state
 from sidebar import render_sidebar
 from chat_room import render_chat_history, handle_user_input
+import streamlit.components.v1 as components
 
 # ✅ 새로 추가
 from room_list import render_room_list
@@ -71,15 +72,39 @@ else:
     # 기존 사이드바
     render_sidebar()
 
-    # 기존 채팅 화면
-    st.subheader("Chatting")
     render_chat_history()
-
-    # 기존 채팅 입력창
     handle_user_input()
 
-    # 하단 앵커
     st.markdown(
         '<div id="bottom-anchor"></div>',
         unsafe_allow_html=True
     )
+
+    # ==================================================
+    # ⬇️ 채팅방 입장 시 즉시 맨 아래로 점프
+    # ==================================================
+    if st.session_state.get("auto_scroll_to_bottom", False):
+
+        components.html(
+            """
+            <script>
+                setTimeout(() => {
+                    const doc = window.parent.document;
+
+                    // 부드러운 스크롤 강제 해제
+                    doc.documentElement.style.scrollBehavior = "auto";
+                    doc.body.style.scrollBehavior = "auto";
+
+                    // 즉시 맨 아래로 이동
+                    window.parent.scrollTo(
+                        0,
+                        doc.documentElement.scrollHeight
+                    );
+                }, 30);
+            </script>
+            """,
+            height=0,
+            width=0
+        )
+
+        st.session_state.auto_scroll_to_bottom = False

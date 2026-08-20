@@ -383,40 +383,6 @@ def render_chat_history():
                             st.session_state.auto_scroll_to_bottom = True
 
                             st.rerun()
-
-    # ==================================================
-    # ⬇️ 채팅방 진입 / 수정 후 맨 아래로 자동 이동
-    # ==================================================
-    if st.session_state.get(
-        "auto_scroll_to_bottom",
-        False
-    ):
-        st.markdown(
-            """
-            <div id="auto-scroll-bottom"></div>
-
-            <script>
-                setTimeout(function() {
-                    const doc = window.parent.document;
-
-                    const target =
-                        doc.getElementById(
-                            "auto-scroll-bottom"
-                        );
-
-                    if (target) {
-                        target.scrollIntoView({
-                            behavior: "instant",
-                            block: "end"
-                        });
-                    }
-                }, 50);
-            </script>
-            """,
-            unsafe_allow_html=True
-        )
-
-        st.session_state.auto_scroll_to_bottom = False
                             
 
 def handle_user_input():
