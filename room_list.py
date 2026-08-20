@@ -53,16 +53,19 @@ def render_room_list():
                 st.error(f"❌ 새 채팅방 생성 실패: {e}")
 
 
+        # =======================================================
+    # 📦 기존 SQLite 데이터 가져오기
     # =======================================================
-    # 📦 기존 SQLite 채팅 가져오기
-    # =======================================================
-    with st.expander("📦 기존 채팅 가져오기"):
+    with st.expander("📦 기존 데이터 가져오기"):
 
         st.caption(
-            "기존 SQLite DB에 저장된 대화를 "
-            "Supabase의 '기존 채팅' 방으로 복사합니다."
+            "기존 SQLite DB에 저장된 채팅, 프롬프트, 프로필을 "
+            "Supabase의 '기존 채팅' 방으로 옮깁니다."
         )
 
+        # ---------------------------------------------------
+        # 기존 채팅 가져오기
+        # ---------------------------------------------------
         if st.button(
             "기존 채팅 가져오기",
             key="migrate_old_chat",
@@ -81,8 +84,54 @@ def render_room_list():
                     st.warning(result["message"])
 
             except Exception as e:
-                st.error(f"❌ 기존 채팅 이전 실패: {e}")
+                st.error(
+                    f"❌ 기존 채팅 이전 실패: {e}"
+                )
 
+        # ---------------------------------------------------
+        # 기존 프롬프트 / 프로필 가져오기
+        # ---------------------------------------------------
+        if st.button(
+            "기존 프롬프트 / 프로필 가져오기",
+            key="migrate_old_settings",
+            use_container_width=True
+        ):
+            try:
+                result = db.migrate_old_settings_to_existing_room()
+
+                if result["success"]:
+
+                    prompt_status = (
+                        "✅ 프롬프트"
+                        if result["prompt_migrated"]
+                        else "➖ 프롬프트 없음"
+                    )
+
+                    avatar_status = (
+                        "✅ 프로필"
+                        if result["avatar_migrated"]
+                        else "➖ 프로필 없음"
+                    )
+
+                    st.success(
+                        f"기존 설정 이전 완료!\n\n"
+                        f"{prompt_status}\n\n"
+                        f"{avatar_status}"
+                    )
+
+                    # 기존 채팅방을 다시 들어갈 때
+                    # 설정을 새로 읽도록 초기화
+                    st.session_state.settings_room_id = None
+
+                else:
+                    st.warning(
+                        result["message"]
+                    )
+
+            except Exception as e:
+                st.error(
+                    f"❌ 기존 프롬프트 / 프로필 이전 실패: {e}"
+                )
 
     st.divider()
 

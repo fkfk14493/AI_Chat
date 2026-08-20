@@ -532,13 +532,15 @@ def save_room_messages(room_id, messages):
 
 def migrate_old_chat_to_supabase():
     """
-    기존 SQLite chat_history를
+    기존 SQLite의 채팅 + 프롬프트 + 프로필 이미지를
     Supabase의 '기존 채팅' 방으로 한 번만 복사합니다.
 
     기존 SQLite 데이터는 삭제하지 않습니다.
     """
 
+    # =======================================================
     # 1. 기존 SQLite 채팅 불러오기
+    # =======================================================
     old_messages = load_messages()
 
     if not old_messages:
@@ -547,9 +549,13 @@ def migrate_old_chat_to_supabase():
             "message": "기존 SQLite에 옮길 채팅이 없습니다."
         }
 
+
     supabase = get_supabase()
 
+
+    # =======================================================
     # 2. 이미 '기존 채팅' 방이 있는지 확인
+    # =======================================================
     existing = (
         supabase
         .table("chat_rooms")
@@ -564,12 +570,57 @@ def migrate_old_chat_to_supabase():
             "message": "이미 '기존 채팅' 방이 존재합니다."
         }
 
-    # 3. 새 방 생성
+
+    # =======================================================
+    # 3. 기존 SQLite 프롬프트 불러오기
+    # =======================================================
+    old_prompt = ""
+
+    try:
+        old_prompt = get_system_prompt("")
+    except Exception:
+        old_prompt = ""
+
+
+    # =======================================================
+    # 4. 기존 SQLite 프로필 사진 불러오기
+    # =======================================================
+    old_avatar = None
+
+    try:
+        old_avatar = load_avatar()
+    except Exception:
+        old_avatar = None
+
+
+    # =======================================================
+    # 5. 프로필 이미지를 base64 문자열로 변환
+    # =======================================================
+    avatar_data = None
+
+    if old_avatar:
+        try:
+            import base64
+
+            avatar_data = base64.b64encode(
+                old_avatar
+            ).decode("utf-8")
+
+        except Exception:
+            avatar_data = None
+
+
+    # =======================================================
+    # 6. '기존 채팅' 방 생성
+    #    프롬프트 / 프로필도 같이 저장
+    # =======================================================
     room_result = (
         supabase
         .table("chat_rooms")
         .insert({
-            "title": "기존 채팅"
+            "title": "기존 채팅",
+            "system_prompt": old_prompt,
+            "avatar_data": avatar_data
         })
         .execute()
     )
@@ -580,12 +631,17 @@ def migrate_old_chat_to_supabase():
             "message": "기존 채팅방 생성에 실패했습니다."
         }
 
+
     room_id = room_result.data[0]["id"]
 
-    # 4. 기존 메시지를 Supabase용 형식으로 변환
+
+    # =======================================================
+    # 7. 기존 메시지를 Supabase용으로 변환
+    # =======================================================
     rows = []
 
     for msg in old_messages:
+
         role = msg.get("role")
         content = msg.get("content", "")
 
@@ -598,7 +654,12 @@ def migrate_old_chat_to_supabase():
             "content": content
         })
 
+
+    # =======================================================
+    # 8. 유효한 메시지가 없으면 방 삭제
+    # =======================================================
     if not rows:
+
         supabase.table("chat_rooms").delete().eq(
             "id",
             room_id
@@ -609,12 +670,18 @@ def migrate_old_chat_to_supabase():
             "message": "이전할 유효한 메시지가 없습니다."
         }
 
-    # 5. Supabase에 저장
+
+    # =======================================================
+    # 9. 메시지 전체 Supabase에 저장
+    # =======================================================
     supabase.table("chat_messages").insert(
         rows
     ).execute()
 
-    # 6. 실제 저장 개수 확인
+
+    # =======================================================
+    # 10. 실제 저장된 메시지 수 확인
+    # =======================================================
     check = (
         supabase
         .table("chat_messages")
@@ -625,12 +692,20 @@ def migrate_old_chat_to_supabase():
 
     saved_count = len(check.data or [])
 
+
+    # =======================================================
+    # 11. 완료
+    # =======================================================
     return {
         "success": True,
         "room_id": room_id,
-        "old_count": len(rows),
         "saved_count": saved_count,
-        "message": f"기존 채팅 {saved_count}개를 이전했습니다."
+        "prompt_migrated": bool(old_prompt),
+        "avatar_migrated": bool(old_avatar),
+        "message": (
+            f"기존 채팅 {saved_count}개와 "
+            f"프롬프트/프로필 설정을 이전했습니다."
+        )
     }
 
 # =======================================================
@@ -716,3 +791,145 @@ def save_room_avatar(room_id, avatar_bytes):
     }).eq(
         "id", room_id
     ).execute()
+
+    # =======================================================
+# 🚚 기존 SQLite 설정 → Supabase 채팅방 설정 이전
+# =======================================================
+
+def migrate_old_settings_to_room(room_id):
+    """
+    기존 SQLite에 저장되어 있던
+    시스템 프롬프트 / 프로필 이미지를
+    지정한 Supabase 채팅방으로 복사합니다.
+    """
+
+    # ---------------------------------------------------
+    # 기존 프롬프트
+    # ---------------------------------------------------
+    old_prompt = ""
+
+    try:
+        old_prompt = get_system_prompt("")
+    except Exception:
+        old_prompt = ""
+
+    if old_prompt:
+        save_room_prompt(
+            room_id,
+            old_prompt
+        )
+
+
+    # ---------------------------------------------------
+    # 기존 프로필 이미지
+    # ---------------------------------------------------
+    old_avatar = None
+
+    try:
+        # 기존 db_handler.py에 load_avatar()가 있다면 사용
+        if "load_avatar" in globals():
+            old_avatar = load_avatar()
+    except Exception:
+        old_avatar = None
+
+    if old_avatar:
+        save_room_avatar(
+            room_id,
+            old_avatar
+        )
+
+
+    return {
+        "success": True,
+        "prompt_migrated": bool(old_prompt),
+        "avatar_migrated": bool(old_avatar)
+    }
+
+def migrate_old_settings_to_existing_room():
+    """
+    이미 만들어진 '기존 채팅' 방에
+    기존 SQLite 프롬프트 / 프로필 사진만 추가합니다.
+    """
+
+    supabase = get_supabase()
+
+    # =======================================================
+    # 기존 채팅방 찾기
+    # =======================================================
+    result = (
+        supabase
+        .table("chat_rooms")
+        .select("id")
+        .eq("title", "기존 채팅")
+        .limit(1)
+        .execute()
+    )
+
+    if not result.data:
+        return {
+            "success": False,
+            "message": "'기존 채팅' 방을 찾지 못했습니다."
+        }
+
+    room_id = result.data[0]["id"]
+
+
+    # =======================================================
+    # 기존 프롬프트
+    # =======================================================
+    old_prompt = ""
+
+    try:
+        old_prompt = get_system_prompt("")
+    except Exception:
+        old_prompt = ""
+
+
+    # =======================================================
+    # 기존 프로필
+    # =======================================================
+    old_avatar = None
+
+    try:
+        old_avatar = load_avatar()
+    except Exception:
+        old_avatar = None
+
+
+    # =======================================================
+    # 프로필 → base64
+    # =======================================================
+    avatar_data = None
+
+    if old_avatar:
+
+        try:
+            import base64
+
+            avatar_data = base64.b64encode(
+                old_avatar
+            ).decode("utf-8")
+
+        except Exception:
+            avatar_data = None
+
+
+    # =======================================================
+    # Supabase 업데이트
+    # =======================================================
+    supabase.table("chat_rooms").update({
+        "system_prompt": old_prompt,
+        "avatar_data": avatar_data
+    }).eq(
+        "id",
+        room_id
+    ).execute()
+
+
+    return {
+        "success": True,
+        "room_id": room_id,
+        "prompt_migrated": bool(old_prompt),
+        "avatar_migrated": bool(old_avatar),
+        "message": "기존 프롬프트와 프로필 이전 완료"
+    }

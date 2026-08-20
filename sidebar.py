@@ -218,37 +218,9 @@ def render_sidebar():
         # ===================================================
         prompt_length = len(user_prompt)
 
-        st.markdown(
-            f"""
-            <div style="
-                text-align:right;
-                margin-top:-10px;
-                margin-bottom:15px;
-            ">
-                <span style="
-                    font-size:0.85rem;
-                    color:#888888;
-                ">
-                    공백 포함:
-                </span>
-
-                <strong style="
-                    font-size:0.95rem;
-                    color:#FF4B4B;
-                ">
-                    {prompt_length:,}
-                </strong>
-
-                <span style="
-                    font-size:0.85rem;
-                    color:#888888;
-                ">
-                    자
-                </span>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        st.caption(
+            f"공백 포함: {prompt_length:,} 자"
+            )
 
 
         # ===================================================
