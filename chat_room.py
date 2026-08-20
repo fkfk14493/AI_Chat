@@ -90,134 +90,254 @@ def rebuild_chat_from_messages():
 def render_chat_history():
     """웹 화면에 대화 기록만 순수하게 출력 (중복 출력 원천 차단)"""
 
-    if st.button(
-        "← 채팅방 목록",
-        key="back_to_room_list"
-    ):
-        st.session_state.current_room_id = None
-        st.session_state.room_messages_loaded = False
-
-        if "chat" in st.session_state:
-            del st.session_state.chat
-
-        st.rerun()
-
-    st.divider()
-
     rendered_keys = set()
 
     for idx, msg in enumerate(st.session_state.messages):
         # 역할(role)과 대화 내용(content)을 하나로 묶어 고유한 키(Key)로 만듭니다.
         msg_key = (msg["role"], msg.get("content", ""))
-        
-        # 🚨 이미 화면에 그린 적이 있는 메시지라면 가차 없이 패스합니다! (2배 출력 원천 차단)
+
+        # 🚨 이미 화면에 그린 적이 있는 메시지라면 패스
         if msg_key in rendered_keys:
             continue
         rendered_keys.add(msg_key)
-        
+
         avatar_image = None
+
         if msg["role"] == "assistant":
-            if "custom_avatar" in st.session_state and st.session_state.custom_avatar is not None:
-                # 🚨 생 바이트 데이터를 스트림릿용 이미지 객체로 변환!
-                avatar_image = io.BytesIO(st.session_state.custom_avatar)
+            if (
+                "custom_avatar" in st.session_state
+                and st.session_state.custom_avatar is not None
+            ):
+                avatar_image = io.BytesIO(
+                    st.session_state.custom_avatar
+                )
             else:
                 avatar_image = "🤖"
-        
-        # 🎯 [순간이동 포인트 심기] HTML div를 사용해 각 메시지에 고유 ID(번호표)를 부여합니다.
-        st.markdown(f'<div id="message-{idx}"></div>', unsafe_allow_html=True)
-        
-        with st.chat_message(msg["role"], avatar=avatar_image):
+
+        # 메시지 위치 앵커
+        st.markdown(
+            f'<div id="message-{idx}"></div>',
+            unsafe_allow_html=True
+        )
+
+        with st.chat_message(
+            msg["role"],
+            avatar=avatar_image
+        ):
             st.write(msg["content"])
-            
+
             # ==========================================
-            # 🟢 [내 질문 수정 영역] 
-            # 내 마지막 질문 말풍선 아래에만 노출 (재전송 및 과거 개편)
+            # 🟢 내 질문 수정 / 다시 보내기
             # ==========================================
-            if msg["role"] == "user" and idx == len(st.session_state.messages) - 2:
+            if (
+                msg["role"] == "user"
+                and idx == len(st.session_state.messages) - 2
+            ):
                 with st.popover("다시 보내기"):
-                    edited_text = st.text_area("내용을 입력하세요:", value=msg["content"], key=f"edit_user_{idx}")
-                    
-                    if st.button("확인", key=f"btn_user_{idx}", use_container_width=True):
-                        if edited_text.strip() and edited_text.strip() != msg["content"]:
+
+                    edited_text = st.text_area(
+                        "내용을 입력하세요:",
+                        value=msg["content"],
+                        key=f"edit_user_{idx}"
+                    )
+
+                    if st.button(
+                        "확인",
+                        key=f"btn_user_{idx}",
+                        use_container_width=True
+                    ):
+                        if (
+                            edited_text.strip()
+                            and edited_text.strip() != msg["content"]
+                        ):
+
                             with st.spinner("수정 중..."):
+
+                                # 기존 user + assistant 삭제
                                 st.session_state.messages.pop()
                                 st.session_state.messages.pop()
-                                
-                                if hasattr(st.session_state.chat, "history") and st.session_state.chat.history:
-                                    st.session_state.chat.history = st.session_state.chat.history[:-2]
-                                if hasattr(st.session_state.chat, "_history") and st.session_state.chat._history:
-                                    st.session_state.chat._history = st.session_state.chat._history[:-2]
-                                
-                                st.session_state.messages.append({"role": "user", "content": edited_text})
+
+                                if (
+                                    hasattr(
+                                        st.session_state.chat,
+                                        "history"
+                                    )
+                                    and st.session_state.chat.history
+                                ):
+                                    st.session_state.chat.history = (
+                                        st.session_state.chat.history[:-2]
+                                    )
+
+                                if (
+                                    hasattr(
+                                        st.session_state.chat,
+                                        "_history"
+                                    )
+                                    and st.session_state.chat._history
+                                ):
+                                    st.session_state.chat._history = (
+                                        st.session_state.chat._history[:-2]
+                                    )
+
+                                # 수정된 질문 추가
+                                st.session_state.messages.append({
+                                    "role": "user",
+                                    "content": edited_text.strip()
+                                })
+
+                                # Supabase 저장
                                 db.save_room_messages(
                                     st.session_state.current_room_id,
                                     st.session_state.messages
-                                    )
-                                
+                                )
+
                                 try:
-                                    response = st.session_state.chat.send_message(edited_text)
+                                    response = (
+                                        st.session_state.chat.send_message(
+                                            edited_text.strip()
+                                        )
+                                    )
+
                                     response_text = response.text
+
                                 except Exception as e:
-                                    # 🚨 구글 전용 429 / 403 / 503 에러 철벽 감지 및 우회
+
                                     is_quota_error = False
-                                    if isinstance(e, errors.ClientError) or isinstance(e, errors.ServerError):
-                                        if e.code in [429, 403, 503]:
+
+                                    if (
+                                        isinstance(
+                                            e,
+                                            errors.ClientError
+                                        )
+                                        or isinstance(
+                                            e,
+                                            errors.ServerError
+                                        )
+                                    ):
+                                        if e.code in [
+                                            429,
+                                            403,
+                                            503
+                                        ]:
                                             is_quota_error = True
-                                    
-                                    if is_quota_error or any(kw in str(e).upper() for kw in ["EXHAUSTED", "QUOTA", "LIMIT", "429"]):
-                                        st.toast("3.5 모델 한도 도달! 3.1 Flash로 우회합니다.")
-                                        
-                                        # 🛡️ get_history() 안전하게 호출하도록 방어막 세팅!
+
+                                    if (
+                                        is_quota_error
+                                        or any(
+                                            kw in str(e).upper()
+                                            for kw in [
+                                                "EXHAUSTED",
+                                                "QUOTA",
+                                                "LIMIT",
+                                                "429"
+                                            ]
+                                        )
+                                    ):
+
+                                        st.toast(
+                                            "3.5 모델 한도 도달! "
+                                            "3.1 Flash로 우회합니다."
+                                        )
+
                                         chat_history = (
-                                            st.session_state.chat.get_history() 
-                                            if hasattr(st.session_state.chat, "get_history") 
+                                            st.session_state.chat.get_history()
+                                            if hasattr(
+                                                st.session_state.chat,
+                                                "get_history"
+                                            )
                                             else None
                                         )
-                                        
-                                        st.session_state.chat = st.session_state.client.chats.create(
-                                            model="gemini-3.1-flash-lite", 
-                                            history=chat_history, 
-                                            config=types.GenerateContentConfig(
-                                                system_instruction=(
-                                                    BASE_ROLEPLAY_PROMPT
-                                                    + "\n"
-                                                    + st.session_state.system_prompt
+
+                                        st.session_state.chat = (
+                                            st.session_state.client.chats.create(
+                                                model=(
+                                                    "gemini-3.1-flash-lite"
                                                 ),
-                                                temperature=0.95
-                                            ),
+                                                history=chat_history,
+                                                config=(
+                                                    types.GenerateContentConfig(
+                                                        system_instruction=(
+                                                            BASE_ROLEPLAY_PROMPT
+                                                            + "\n"
+                                                            + st.session_state.system_prompt
+                                                        ),
+                                                        temperature=0.95
+                                                    )
+                                                ),
+                                            )
                                         )
-                                        response = st.session_state.chat.send_message(edited_text)
+
+                                        response = (
+                                            st.session_state.chat.send_message(
+                                                edited_text.strip()
+                                            )
+                                        )
+
                                         response_text = response.text
-                                
+
                                     else:
                                         raise e
 
-                                # 성공한 응답의 이번 요청 토큰을 누적하고 DB에 안전하게 업데이트!
+                                # 토큰 누적
                                 if response.usage_metadata:
-                                    input_tokens = response.usage_metadata.prompt_token_count or 0
-                                    output_tokens = response.usage_metadata.candidates_token_count or 0
 
-                                    st.session_state.total_input_tokens += input_tokens
-                                    st.session_state.total_output_tokens += output_tokens
-                                    
+                                    input_tokens = (
+                                        response
+                                        .usage_metadata
+                                        .prompt_token_count
+                                        or 0
+                                    )
+
+                                    output_tokens = (
+                                        response
+                                        .usage_metadata
+                                        .candidates_token_count
+                                        or 0
+                                    )
+
+                                    st.session_state.total_input_tokens += (
+                                        input_tokens
+                                    )
+
+                                    st.session_state.total_output_tokens += (
+                                        output_tokens
+                                    )
+
                                     db.update_room_tokens(
                                         st.session_state.current_room_id,
                                         input_tokens,
                                         output_tokens
-                                        )
+                                    )
 
-                                st.session_state.messages.append({"role": "assistant", "content": response_text})
+                                # 새 AI 답변 추가
+                                st.session_state.messages.append({
+                                    "role": "assistant",
+                                    "content": response_text
+                                })
+
+                                # Supabase 저장
                                 db.save_room_messages(
                                     st.session_state.current_room_id,
                                     st.session_state.messages
-                                    )
-                                st.toast("마지막 대화가 수정 및 갱신되었습니다!")
+                                )
+
+                                st.toast(
+                                    "마지막 대화가 수정 및 "
+                                    "갱신되었습니다!"
+                                )
+
+                                # 다시 그린 뒤 맨 아래로 이동
+                                st.session_state.auto_scroll_to_bottom = True
+
                                 st.rerun()
 
             # ==========================================
             # 🔴 AI 답변 수정하기
             # ==========================================
-            elif msg["role"] == "assistant" and idx == len(st.session_state.messages) - 1:
+            elif (
+                msg["role"] == "assistant"
+                and idx == len(st.session_state.messages) - 1
+            ):
 
                 with st.popover("수정하기"):
 
@@ -236,28 +356,68 @@ def render_chat_history():
 
                         if (
                             refined_text.strip()
-                            and refined_text.strip() != msg["content"]
+                            and refined_text.strip()
+                            != msg["content"]
                         ):
 
                             # 1. 세션 메시지 수정
-                            st.session_state.messages[idx]["content"] = (
-                                refined_text.strip()
-                            )
+                            st.session_state.messages[idx][
+                                "content"
+                            ] = refined_text.strip()
 
-                            # 2. 현재 방 Supabase에 수정 내용 저장
+                            # 2. Supabase 저장
                             db.save_room_messages(
                                 st.session_state.current_room_id,
                                 st.session_state.messages
                             )
 
-                            # 3. 수정된 대화 기준으로 AI 기억 재생성
+                            # 3. 수정된 내용으로 AI 기억 재생성
                             rebuild_chat_from_messages()
 
                             st.toast(
-                                "수정 완료! AI 기억에도 반영되었습니다."
+                                "수정 완료! "
+                                "AI 기억에도 반영되었습니다."
                             )
 
+                            # 다시 그린 뒤 맨 아래로 이동
+                            st.session_state.auto_scroll_to_bottom = True
+
                             st.rerun()
+
+    # ==================================================
+    # ⬇️ 채팅방 진입 / 수정 후 맨 아래로 자동 이동
+    # ==================================================
+    if st.session_state.get(
+        "auto_scroll_to_bottom",
+        False
+    ):
+        st.markdown(
+            """
+            <div id="auto-scroll-bottom"></div>
+
+            <script>
+                setTimeout(function() {
+                    const doc = window.parent.document;
+
+                    const target =
+                        doc.getElementById(
+                            "auto-scroll-bottom"
+                        );
+
+                    if (target) {
+                        target.scrollIntoView({
+                            behavior: "instant",
+                            block: "end"
+                        });
+                    }
+                }, 50);
+            </script>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.session_state.auto_scroll_to_bottom = False
+                            
 
 def handle_user_input():
     """[4단계] 사용자 입력창 및 통합 대화 처리 구역 (UI 즉시 반영 및 429 우회 통합)"""

@@ -169,8 +169,12 @@ def render_room_list():
             room_id = room["id"]
             title = room.get("title") or f"채팅방 {room_id}"
 
-            room_col, edit_col, delete_col = st.columns(
-                [7, 1, 1]
+            # ===============================================
+            # 💬 채팅방 이름 + ⋯ 메뉴
+            # ===============================================
+            room_col, menu_col = st.columns(
+                [10, 1],
+                vertical_alignment="center"
             )
 
 
@@ -182,7 +186,8 @@ def render_room_list():
                 if st.button(
                     title,
                     key=f"room_{room_id}",
-                    use_container_width=True
+                    use_container_width=True,
+                    type="tertiary"
                 ):
                     try:
                         messages = db.get_messages(room_id)
@@ -191,6 +196,10 @@ def render_room_list():
                         st.session_state.messages = messages
                         st.session_state.room_messages_loaded = True
 
+                        # 채팅방 들어가면 맨 아래로 이동
+                        st.session_state.auto_scroll_to_bottom = True
+
+                        # 기존 Gemini 객체 제거
                         if "chat" in st.session_state:
                             del st.session_state.chat
 
@@ -203,88 +212,50 @@ def render_room_list():
 
 
             # ===============================================
-            # ✏️ 이름 수정
+            # ⋯ 채팅방 관리 메뉴
             # ===============================================
-            with edit_col:
+            with menu_col:
 
-                if st.button(
-                    "✏️",
-                    key=f"edit_{room_id}",
-                    help="이름 수정",
-                    use_container_width=True
+                with st.popover(
+                    "⋯",
+                    use_container_width=False
                 ):
-                    st.session_state.editing_room_id = room_id
-                    st.rerun()
 
+                    st.markdown("##### 채팅방 관리")
 
-            # ===============================================
-            # 🗑️ 삭제
-            # ===============================================
-            with delete_col:
-
-                if st.button(
-                    "🗑️",
-                    key=f"delete_{room_id}",
-                    help="채팅방 삭제",
-                    use_container_width=True
-                ):
-                    try:
-                        db.delete_room(room_id)
-
-                        if (
-                            st.session_state.get("editing_room_id")
-                            == room_id
-                        ):
-                            st.session_state.editing_room_id = None
-
-                        st.rerun()
-
-                    except Exception as e:
-                        st.error(
-                            f"❌ 채팅방 삭제 실패: {e}"
-                        )
-
-
-            # ===============================================
-            # ✏️ 이름 편집창
-            # ===============================================
-            if (
-                st.session_state.get("editing_room_id")
-                == room_id
-            ):
-
-                new_title = st.text_input(
-                    "채팅방 이름",
-                    value=title,
-                    key=f"title_input_{room_id}",
-                    label_visibility="collapsed"
-                )
-
-                save_col, cancel_col = st.columns(2)
-
-                with save_col:
+                    # ---------------------------------------
+                    # ✏️ 이름 수정
+                    # ---------------------------------------
+                    new_title = st.text_input(
+                        "채팅방 이름",
+                        value=title,
+                        key=f"title_input_{room_id}"
+                    )
 
                     if st.button(
-                        "저장",
+                        "이름 변경",
                         key=f"save_title_{room_id}",
                         use_container_width=True
                     ):
+
                         new_title = new_title.strip()
 
                         if new_title:
-                            try:
-                                db.rename_room(
-                                    room_id,
-                                    new_title
-                                )
 
-                                st.session_state.editing_room_id = None
-                                st.rerun()
+                            if new_title != title:
 
-                            except Exception as e:
-                                st.error(
-                                    f"❌ 이름 수정 실패: {e}"
-                                )
+                                try:
+                                    db.rename_room(
+                                        room_id,
+                                        new_title
+                                    )
+
+                                    st.rerun()
+
+                                except Exception as e:
+                                    st.error(
+                                        f"❌ 이름 수정 실패: {e}"
+                                    )
 
                         else:
                             st.warning(
@@ -292,15 +263,28 @@ def render_room_list():
                             )
 
 
-                with cancel_col:
+                    st.divider()
 
+
+                    # ---------------------------------------
+                    # 🗑️ 삭제
+                    # ---------------------------------------
                     if st.button(
-                        "취소",
-                        key=f"cancel_title_{room_id}",
-                        use_container_width=True
+                        "🗑️ 채팅방 삭제",
+                        key=f"delete_{room_id}",
+                        use_container_width=True,
+                        type="primary"
                     ):
-                        st.session_state.editing_room_id = None
-                        st.rerun()
+
+                        try:
+                            db.delete_room(room_id)
+
+                            st.rerun()
+
+                        except Exception as e:
+                            st.error(
+                                f"❌ 채팅방 삭제 실패: {e}"
+                            )
 
 
             st.divider()

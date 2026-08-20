@@ -76,7 +76,7 @@ def render_sidebar():
         if st.button(
             "← 채팅방 목록",
             key=f"back_to_room_list_{room_id}",
-            use_container_width=True
+            type="tertiary"
         ):
             st.session_state.current_room_id = None
             st.session_state.room_messages_loaded = False
@@ -88,8 +88,6 @@ def render_sidebar():
 
             st.rerun()
 
-
-        st.markdown("---")
 
         st.title("⚙️ 설정 및 관리")
 

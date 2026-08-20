@@ -1,8 +1,7 @@
 # app.py
 import streamlit as st
 import db_handler as db
-
-from config import render_backup_tools, init_app_state
+from config import init_app_state
 from sidebar import render_sidebar
 from chat_room import render_chat_history, handle_user_input
 
@@ -65,9 +64,6 @@ if st.session_state.current_room_id is None:
 # 채팅방에 들어간 상태
 # -----------------------------
 else:
-
-    # 백업 / 복원 도구
-    render_backup_tools()
 
     # 기존 세션 초기화
     init_app_state()
