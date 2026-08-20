@@ -387,6 +387,8 @@ def render_chat_history():
 
 def handle_user_input():
     """[4단계] 사용자 입력창 및 통합 대화 처리 구역 (UI 즉시 반영 및 429 우회 통합)"""
+    story_summary = ""
+    
     if user_input := st.chat_input("메시지를 입력하세요..."):
                     
         # ── [특수 기능 2] 사용자가 '/되돌리기' 이라고 입력했을 때 ──
@@ -447,11 +449,11 @@ def handle_user_input():
 
                     # 기존 요약본이 있다면 같이 적용
                     try:
-                        db.load_room_summary(
+                        story_summary = db.load_room_summary(
                             st.session_state.current_room_id
-                            )
+                            ) or ""
                     except Exception:
-                        story_summary = ""
+                         story_summary = ""
 
                     if story_summary:
                         updated_instruction = f"""
