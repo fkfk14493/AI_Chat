@@ -525,3 +525,35 @@ def save_room_messages(room_id, messages):
     }).eq(
         "id", room_id
     ).execute()
+
+    # =======================================================
+# 🚚 기존 SQLite 채팅 이전
+# =======================================================
+
+with st.expander("📦 기존 채팅 가져오기"):
+
+    st.caption(
+        "기존 SQLite에 저장되어 있던 대화를 "
+        "Supabase의 '기존 채팅' 방으로 복사합니다."
+    )
+
+    if st.button(
+        "기존 채팅 가져오기",
+        key="migrate_old_chat"
+    ):
+
+        try:
+            result = db.migrate_old_chat_to_supabase()
+
+            if result["success"]:
+                st.success(
+                    f"✅ 이전 완료! "
+                    f"{result['saved_count']}개의 메시지를 옮겼습니다."
+                )
+                st.rerun()
+
+            else:
+                st.warning(result["message"])
+
+        except Exception as e:
+            st.error(f"❌ 이전 실패: {e}")
