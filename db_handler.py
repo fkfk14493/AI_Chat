@@ -526,34 +526,109 @@ def save_room_messages(room_id, messages):
         "id", room_id
     ).execute()
 
-    # =======================================================
-# 🚚 기존 SQLite 채팅 이전
+# =======================================================
+# 🚚 기존 SQLite 채팅 → Supabase 이전
 # =======================================================
 
-with st.expander("📦 기존 채팅 가져오기"):
+def migrate_old_chat_to_supabase():
+    """
+    기존 SQLite chat_history를
+    Supabase의 '기존 채팅' 방으로 한 번만 복사합니다.
 
-    st.caption(
-        "기존 SQLite에 저장되어 있던 대화를 "
-        "Supabase의 '기존 채팅' 방으로 복사합니다."
+    기존 SQLite 데이터는 삭제하지 않습니다.
+    """
+
+    # 1. 기존 SQLite 채팅 불러오기
+    old_messages = load_messages()
+
+    if not old_messages:
+        return {
+            "success": False,
+            "message": "기존 SQLite에 옮길 채팅이 없습니다."
+        }
+
+    supabase = get_supabase()
+
+    # 2. 이미 '기존 채팅' 방이 있는지 확인
+    existing = (
+        supabase
+        .table("chat_rooms")
+        .select("id, title")
+        .eq("title", "기존 채팅")
+        .execute()
     )
 
-    if st.button(
-        "기존 채팅 가져오기",
-        key="migrate_old_chat"
-    ):
+    if existing.data:
+        return {
+            "success": False,
+            "message": "이미 '기존 채팅' 방이 존재합니다."
+        }
 
-        try:
-            result = db.migrate_old_chat_to_supabase()
+    # 3. 새 방 생성
+    room_result = (
+        supabase
+        .table("chat_rooms")
+        .insert({
+            "title": "기존 채팅"
+        })
+        .execute()
+    )
 
-            if result["success"]:
-                st.success(
-                    f"✅ 이전 완료! "
-                    f"{result['saved_count']}개의 메시지를 옮겼습니다."
-                )
-                st.rerun()
+    if not room_result.data:
+        return {
+            "success": False,
+            "message": "기존 채팅방 생성에 실패했습니다."
+        }
 
-            else:
-                st.warning(result["message"])
+    room_id = room_result.data[0]["id"]
 
-        except Exception as e:
-            st.error(f"❌ 이전 실패: {e}")
+    # 4. 기존 메시지를 Supabase용 형식으로 변환
+    rows = []
+
+    for msg in old_messages:
+        role = msg.get("role")
+        content = msg.get("content", "")
+
+        if not role or not content:
+            continue
+
+        rows.append({
+            "room_id": room_id,
+            "role": role,
+            "content": content
+        })
+
+    if not rows:
+        supabase.table("chat_rooms").delete().eq(
+            "id",
+            room_id
+        ).execute()
+
+        return {
+            "success": False,
+            "message": "이전할 유효한 메시지가 없습니다."
+        }
+
+    # 5. Supabase에 저장
+    supabase.table("chat_messages").insert(
+        rows
+    ).execute()
+
+    # 6. 실제 저장 개수 확인
+    check = (
+        supabase
+        .table("chat_messages")
+        .select("id")
+        .eq("room_id", room_id)
+        .execute()
+    )
+
+    saved_count = len(check.data or [])
+
+    return {
+        "success": True,
+        "room_id": room_id,
+        "old_count": len(rows),
+        "saved_count": saved_count,
+        "message": f"기존 채팅 {saved_count}개를 이전했습니다."
+    }
